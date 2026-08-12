@@ -40,6 +40,12 @@ const el = {
   envFields: $("#env-fields"),
   envProjectName: $("#env-project-name"),
   envHint: $("#env-hint"),
+  modalDup: $("#modal-dup"),
+  dupSourceLabel: $("#dup-source-label"),
+  dupName: $("#dup-name"),
+  dupFolder: $("#dup-folder"),
+  dupParent: $("#dup-parent"),
+  dupOpenCursor: $("#dup-open-cursor"),
 };
 
 let busy = false;
@@ -48,7 +54,25 @@ let view = "projects";
 let selectedProjectId = null;
 let projectLogBuffer = "";
 let envEditProjectId = null;
+let dupSourceId = null;
+let dupFolderTouched = false;
 const projectIpCache = new Map();
+
+function slugifyFolderName(name) {
+  return (
+    String(name || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "project"
+  );
+}
+
+function parentDirOf(filePath) {
+  const s = String(filePath || "").replace(/[/\\]+$/, "");
+  const idx = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\"));
+  return idx > 0 ? s.slice(0, idx) : s;
+}
 
 function formatProjectIpLine(info) {
   if (!info) return "IP: —";
@@ -497,6 +521,7 @@ function renderProjects(snap) {
         ? `<button type="button" class="ghost" data-role="test-mcp">MCP</button>`
         : "",
       `<button type="button" class="ghost" data-role="export">Eksport</button>`,
+      `<button type="button" class="ghost" data-role="duplicate">Duplikuj</button>`,
     ]
       .filter(Boolean)
       .join("\n         ");
@@ -750,6 +775,10 @@ function renderProjects(snap) {
         if (out?.path) log(`Zapisano: ${out.path}`);
         return null;
       });
+    });
+
+    card.querySelector('[data-role="duplicate"]').addEventListener("click", () => {
+      openDupModal(item);
     });
 
     card.querySelector('[data-role="remove"]').addEventListener("click", () => {
@@ -1030,6 +1059,28 @@ function closeNewModal() {
   el.modalNew.classList.add("hidden");
 }
 
+function openDupModal(item) {
+  dupSourceId = item.id;
+  dupFolderTouched = false;
+  const suggestedName = `${item.name} kopia`;
+  el.dupName.value = suggestedName;
+  el.dupFolder.value = slugifyFolderName(suggestedName);
+  el.dupParent.value = parentDirOf(item.path || "");
+  if (el.dupOpenCursor) el.dupOpenCursor.checked = false;
+  if (el.dupSourceLabel) {
+    el.dupSourceLabel.textContent = `Źródło: ${item.name} → nowa nazwa i folder (kontenery Docker osobne).`;
+  }
+  el.modalDup.classList.remove("hidden");
+  el.dupName.focus();
+  el.dupName.select();
+}
+
+function closeDupModal() {
+  el.modalDup.classList.add("hidden");
+  dupSourceId = null;
+  dupFolderTouched = false;
+}
+
 $("#btn-settings").addEventListener("click", () => showView("settings"));
 $("#btn-settings-back").addEventListener("click", () => showView("projects"));
 
@@ -1118,6 +1169,57 @@ $("#btn-new-project").addEventListener("click", openNewModal);
 $("#btn-new-cancel").addEventListener("click", closeNewModal);
 el.modalNew.addEventListener("click", (e) => {
   if (e.target === el.modalNew) closeNewModal();
+});
+
+$("#btn-dup-cancel")?.addEventListener("click", closeDupModal);
+el.modalDup?.addEventListener("click", (e) => {
+  if (e.target === el.modalDup) closeDupModal();
+});
+el.dupName?.addEventListener("input", () => {
+  if (dupFolderTouched) return;
+  el.dupFolder.value = slugifyFolderName(el.dupName.value);
+});
+el.dupFolder?.addEventListener("input", () => {
+  dupFolderTouched = true;
+});
+$("#btn-dup-pick-parent")?.addEventListener("click", async () => {
+  const dir = await window.vpnHub.pickProjectParent();
+  if (dir) el.dupParent.value = dir;
+});
+$("#btn-dup-create")?.addEventListener("click", () => {
+  if (!dupSourceId) return;
+  const name = (el.dupName.value || "").trim();
+  const folderName = (el.dupFolder.value || "").trim();
+  const parentDir = (el.dupParent.value || "").trim();
+  if (!name) {
+    setError("Podaj nazwę projektu");
+    return;
+  }
+  if (!folderName) {
+    setError("Podaj nazwę folderu");
+    return;
+  }
+  if (!parentDir) {
+    setError("Wybierz folder nadrzędny");
+    return;
+  }
+  const sourceId = dupSourceId;
+  withBusy(async () => {
+    closeDupModal();
+    log(`Duplikuję → ${name} (${folderName})`);
+    const snap = await window.vpnHub.duplicateProject({
+      id: sourceId,
+      name,
+      folderName,
+      parentDir,
+      openCursor: !!el.dupOpenCursor?.checked,
+    });
+    if (snap?.duplicatedProjectId) {
+      selectedProjectId = snap.duplicatedProjectId;
+      await attachProjectLogs(snap.duplicatedProjectId);
+    }
+    return snap;
+  });
 });
 
 $("#btn-env-cancel").addEventListener("click", closeEnvModal);

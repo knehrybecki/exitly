@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld("vpnHub", {
   checkProjectIp: (id) => ipcRenderer.invoke("hub:checkProjectIp", id),
   createProject: (input) => ipcRenderer.invoke("hub:createProject", input),
   registerProject: (input) => ipcRenderer.invoke("hub:registerProject", input),
+  duplicateProject: (input) =>
+    ipcRenderer.invoke("hub:duplicateProject", input),
   exportProject: (id) => ipcRenderer.invoke("hub:exportProject", id),
   importProject: () => ipcRenderer.invoke("hub:importProject"),
   setCrawlerExit: (id, exit) => ipcRenderer.invoke("hub:setCrawlerExit", id, exit),

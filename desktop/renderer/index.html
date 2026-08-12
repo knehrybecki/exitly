@@ -226,6 +226,38 @@
       </div>
     </div>
 
+    <div id="modal-dup" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <h2>Duplikuj projekt</h2>
+        <p class="lede" id="dup-source-label">
+          Kopia plików na dysku — nowa nazwa i folder, unikalne kontenery Docker.
+        </p>
+        <label class="field">
+          <span>Nazwa</span>
+          <input id="dup-name" type="text" maxlength="60" placeholder="np. sklep-ro-kopia" />
+        </label>
+        <label class="field">
+          <span>Nazwa folderu</span>
+          <input id="dup-folder" type="text" maxlength="60" placeholder="np. sklep-ro-kopia" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span>Folder nadrzędny</span>
+          <div class="row path-row">
+            <input id="dup-parent" type="text" readonly placeholder="Wybierz…" />
+            <button type="button" class="ghost" id="btn-dup-pick-parent">Wybierz</button>
+          </div>
+        </label>
+        <label class="check">
+          <input id="dup-open-cursor" type="checkbox" />
+          Otwórz w Cursorze
+        </label>
+        <div class="row modal-actions">
+          <button type="button" class="ghost" id="btn-dup-cancel">Anuluj</button>
+          <button type="button" class="primary" id="btn-dup-create">Duplikuj</button>
+        </div>
+      </div>
+    </div>
+
     <script src="renderer.js"></script>
   </body>
 </html>

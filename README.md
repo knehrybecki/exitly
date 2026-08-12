@@ -35,7 +35,7 @@ The app auto-updates from the in-app banner.
 ### Run from source
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USER/exitly.git
+git clone https://github.com/knehrybecki/exitly.git
 cd exitly/desktop
 pnpm install
 pnpm start
@@ -51,7 +51,7 @@ Build & publish: [`RELEASE.md`](RELEASE.md) · [`desktop/README.md`](desktop/REA
 ## Quick start (CLI)
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USER/exitly.git
+git clone https://github.com/knehrybecki/exitly.git
 cd exitly
 ./bin/vpn setup
 ```

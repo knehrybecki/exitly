@@ -3423,6 +3423,72 @@ async function importProject(
   }
 }
 
+async function duplicateProject(
+  { id, name, folderName, parentDir, openCursor = false },
+  { onLog } = {},
+) {
+  const source = findCrawler(id);
+  if (!source || source.kind !== 'project') {
+    throw new Error('Duplikacja tylko dla projektów');
+  }
+  const src = path.resolve(source.path || '');
+  if (!src || !fs.existsSync(src) || !fs.statSync(src).isDirectory()) {
+    throw new Error(`Brak folderu projektu: ${src}`);
+  }
+
+  const cleanName = String(name || '')
+    .trim()
+    .slice(0, 60);
+  if (!cleanName) throw new Error('Podaj nazwę projektu');
+
+  const folderRaw = String(folderName || '').trim();
+  const folder = slugifyName(folderRaw || cleanName);
+  if (!folder) throw new Error('Podaj nazwę folderu');
+
+  const parent = path.resolve(
+    String(parentDir || '').trim() || path.dirname(src),
+  );
+  if (!parent || !fs.existsSync(parent) || !fs.statSync(parent).isDirectory()) {
+    throw new Error('Wybierz istniejący folder nadrzędny');
+  }
+
+  const projectDir = path.join(parent, folder);
+  if (fs.existsSync(projectDir)) {
+    throw new Error(`Folder już istnieje: ${projectDir}`);
+  }
+  if (path.resolve(projectDir) === src) {
+    throw new Error('Folder docelowy nie może być taki sam jak źródło');
+  }
+
+  if (onLog) {
+    onLog(`Duplikuję ${source.name} → ${cleanName} (${projectDir})`);
+  }
+  copyProjectTreeFiltered(src, projectDir);
+
+  const crawler = await registerProject(
+    {
+      projectPath: projectDir,
+      name: cleanName,
+      country: source.country || source.exit,
+      crawlModel: source.crawlModel,
+      antibotModel: source.antibotModel,
+      workers: source.workers,
+      rewriteContainers: true,
+    },
+    { onLog },
+  );
+
+  if (openCursor) {
+    try {
+      await openInCursor(projectDir, { onLog });
+    } catch (err) {
+      if (onLog) onLog(`Nie udało się otworzyć Cursor: ${err.message || err}`);
+    }
+  }
+
+  return crawler;
+}
+
 async function registerProject(
   { projectPath, name, country, exit, crawlModel, antibotModel, workers, rewriteContainers = false },
   { onLog } = {},
@@ -4913,6 +4979,7 @@ module.exports = {
   stopCrawler,
   createProject,
   registerProject,
+  duplicateProject,
   exportProject,
   importProject,
   setCrawlerExit,

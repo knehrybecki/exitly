@@ -249,6 +249,13 @@ function registerIpcHandlers() {
     return hub.getSnapshot(sendLog);
   });
 
+  handle("hub:duplicateProject", async (_e, input) => {
+    const crawler = await hub.duplicateProject(input || {}, { onLog: sendLog });
+    sendLog(`Zduplikowano projekt: ${crawler.name}`);
+    const snap = await hub.getSnapshot(sendLog);
+    return { ...snap, duplicatedProjectId: crawler.id };
+  });
+
   handle("hub:exportProject", async (_e, id) => {
     const list = await hub.listCrawlersWithStatus();
     const hit = list.find((c) => c.id === String(id || ""));
