@@ -1,7 +1,7 @@
 {
   "name": "exitly",
   "productName": "Exitly",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Exitly — ProtonVPN country exits for any Docker project",
   "main": "lib/main/index.js",
   "author": {
@@ -17,12 +17,12 @@
   "private": true,
   "packageManager": "pnpm@11.8.0",
   "scripts": {
-    "build": "node ./node_modules/typescript/lib/tsc.js -p tsconfig.json && pnpm run build:preload && pnpm run build:renderer",
-    "build:preload": "node ./node_modules/esbuild/bin/esbuild src/preload.ts --bundle --outfile=lib/preload.js --platform=node --format=cjs --external:electron --target=es2022",
-    "build:renderer": "node ./node_modules/esbuild/bin/esbuild src/renderer/main.ts --bundle --outfile=renderer/renderer.js --platform=browser --target=es2022 --format=iife",
-    "test": "node ./node_modules/vitest/vitest.mjs run",
-    "prestart": "node -e \"require('fs').accessSync('node_modules/typescript/lib/tsc.js'); require('fs').accessSync('node_modules/esbuild/bin/esbuild'); require('fs').accessSync('node_modules/electron/cli.js')\"",
-    "start": "pnpm run build && env -u ELECTRON_RUN_AS_NODE node ./node_modules/electron/cli.js .",
+    "build": "tsc -p tsconfig.json && pnpm run build:preload && pnpm run build:renderer",
+    "build:preload": "esbuild src/preload.ts --bundle --outfile=lib/preload.js --platform=node --format=cjs --external:electron --target=es2022",
+    "build:renderer": "esbuild src/renderer/main.ts --bundle --outfile=renderer/renderer.js --platform=browser --target=es2022 --format=iife",
+    "test": "vitest run",
+    "prestart": "node -e \"require('typescript'); require('esbuild'); require('electron')\"",
+    "start": "pnpm run build && env -u ELECTRON_RUN_AS_NODE electron .",
     "dev": "pnpm run start",
     "pack": "pnpm run build && electron-builder --dir",
     "dist": "pnpm run build && electron-builder --publish never",
