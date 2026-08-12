@@ -1,7 +1,7 @@
 {
   "name": "exitly",
   "productName": "Exitly",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Exitly — ProtonVPN country exits for any Docker project",
   "main": "lib/main/index.js",
   "author": {
