@@ -1,43 +1,66 @@
-/** @ts-nocheck */
 /** Renderer app — modular entry (bundled to renderer/renderer.js). */
 import { api } from "./api";
-import { $, $$, escapeHtml, log as uiLog, setError as uiSetError, setBusy as uiSetBusy, isBusy } from "./ui";
+import {
+  $,
+  $$,
+  escapeHtml,
+  log as uiLog,
+  requireEl,
+  setError as uiSetError,
+  setBusy as uiSetBusy,
+  isBusy,
+} from "./ui";
 import { slugifyFolderName, parentDirOf } from "./modals/helpers";
+import type {
+  Country,
+  HostWgConfig,
+  OllamaConfig,
+  ProjectIpInfo,
+  ProjectItem,
+  SerperConfig,
+  Snapshot,
+  StartOption,
+  UpdateStatusPayload,
+} from "./types";
+
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 const el = {
   setup: $("#setup"),
   main: $("#main-ui"),
   settings: $("#settings"),
   projectList: $("#project-list"),
-  newCountry: $("#new-country"),
-  newName: $("#new-name"),
-  newParent: $("#new-parent"),
-  newOpenCursor: $("#new-open-cursor"),
+  newCountry: $<HTMLSelectElement>("#new-country"),
+  newName: $<HTMLInputElement>("#new-name"),
+  newParent: $<HTMLInputElement>("#new-parent"),
+  newOpenCursor: $<HTMLInputElement>("#new-open-cursor"),
   modalNew: $("#modal-new"),
   busyBar: $("#busy-bar"),
   log: $("#log"),
   error: $("#error"),
-  privateKey: $("#private-key"),
+  privateKey: $<HTMLInputElement>("#private-key"),
   updateBanner: $("#update-banner"),
   updateTitle: $("#update-title"),
   updateDetail: $("#update-detail"),
   updateProgress: $("#update-progress"),
   updateProgressBar: $("#update-progress-bar"),
-  btnUpdateDownload: $("#btn-update-download"),
-  btnUpdateInstall: $("#btn-update-install"),
+  btnUpdateDownload: $<HTMLButtonElement>("#btn-update-download"),
+  btnUpdateInstall: $<HTMLButtonElement>("#btn-update-install"),
   appVersion: $("#app-version"),
-  ollamaEnabled: $("#ollama-enabled"),
-  ollamaUrl: $("#ollama-url"),
+  ollamaEnabled: $<HTMLInputElement>("#ollama-enabled"),
+  ollamaUrl: $<HTMLInputElement>("#ollama-url"),
   ollamaStatus: $("#ollama-status"),
-  serperEnabled: $("#serper-enabled"),
-  serperKey: $("#serper-key"),
+  serperEnabled: $<HTMLInputElement>("#serper-enabled"),
+  serperKey: $<HTMLInputElement>("#serper-key"),
   serperStatus: $("#serper-status"),
-  hostWgName: $("#hostwg-name"),
-  hostWgConfig: $("#hostwg-config"),
+  hostWgName: $<HTMLInputElement>("#hostwg-name"),
+  hostWgConfig: $<HTMLTextAreaElement>("#hostwg-config"),
   hostWgStatus: $("#hostwg-status"),
-  newCrawlModel: $("#new-crawl-model"),
-  newAntibotModel: $("#new-antibot-model"),
-  newWorkers: $("#new-workers"),
+  newCrawlModel: $<HTMLSelectElement>("#new-crawl-model"),
+  newAntibotModel: $<HTMLSelectElement>("#new-antibot-model"),
+  newWorkers: $<HTMLSelectElement>("#new-workers"),
   newOptionsList: $("#new-options-list"),
   modalEnv: $("#modal-env"),
   envFields: $("#env-fields"),
@@ -45,35 +68,42 @@ const el = {
   envHint: $("#env-hint"),
   modalDup: $("#modal-dup"),
   dupSourceLabel: $("#dup-source-label"),
-  dupName: $("#dup-name"),
-  dupFolder: $("#dup-folder"),
-  dupParent: $("#dup-parent"),
-  dupOpenCursor: $("#dup-open-cursor"),
+  dupName: $<HTMLInputElement>("#dup-name"),
+  dupFolder: $<HTMLInputElement>("#dup-folder"),
+  dupParent: $<HTMLInputElement>("#dup-parent"),
+  dupOpenCursor: $<HTMLInputElement>("#dup-open-cursor"),
 };
 
-function log(line) { uiLog(el.log, line); }
-function setError(msg) { uiSetError(el.error, msg); }
-function setBusy(on) {
+function log(line: string): void {
+  uiLog(el.log, line);
+}
+function setError(msg: string): void {
+  uiSetError(el.error, msg);
+}
+function setBusy(on: boolean): void {
   uiSetBusy(el.busyBar, on, { preserveIds: ["btn-settings", "btn-settings-back"] });
 }
-function withBusy(fn) {
+function withBusy(fn: () => unknown): Promise<Snapshot | null> {
   if (isBusy()) return Promise.resolve(null);
   setBusy(true);
   setError("");
   return Promise.resolve()
     .then(fn)
     .then((snap) => {
-      if (snap) renderSnapshot(snap);
-      return snap;
+      if (snap && typeof snap === "object") {
+        renderSnapshot(snap as Snapshot);
+        return snap as Snapshot;
+      }
+      return null;
     })
-    .catch((err) => {
-      setError(err.message || String(err));
+    .catch((err: unknown) => {
+      setError(errMsg(err));
       return null;
     })
     .finally(() => setBusy(false));
 }
 
-function formatProjectIpLine(info) {
+function formatProjectIpLine(info: ProjectIpInfo | null | undefined): string {
   if (!info) return "IP: —";
   if (info.ip) {
     const bits = [info.ip];
@@ -86,16 +116,16 @@ function formatProjectIpLine(info) {
   return `IP: ${info.error || "niedostępne"}`;
 }
 
-let snapshot = null;
-let view = "projects";
-let selectedProjectId = null;
+let snapshot: Snapshot | null = null;
+let view: "projects" | "settings" = "projects";
+let selectedProjectId: string | null = null;
 let projectLogBuffer = "";
-let envEditProjectId = null;
-let dupSourceId = null;
+let envEditProjectId: string | null = null;
+let dupSourceId: string | null = null;
 let dupFolderTouched = false;
-const projectIpCache = new Map();
+const projectIpCache = new Map<string, ProjectIpInfo>();
 
-function showView(name) {
+function showView(name: "projects" | "settings"): void {
   view = name;
   el.settings.classList.toggle("hidden", name !== "settings");
   if (!snapshot?.setupNeeded) {
@@ -103,18 +133,18 @@ function showView(name) {
   }
 }
 
-function setOllamaStatus(text, kind) {
+function setOllamaStatus(text: string, kind: "" | "ok" | "err"): void {
   if (!el.ollamaStatus) return;
   el.ollamaStatus.textContent = text || "";
   el.ollamaStatus.classList.remove("ok", "err");
   if (kind) el.ollamaStatus.classList.add(kind);
 }
 
-function ollamaModelList(models) {
-  return Array.isArray(models) ? models.filter(Boolean) : [];
+function ollamaModelList(models: unknown): string[] {
+  return Array.isArray(models) ? models.filter((m): m is string => !!m) : [];
 }
 
-function modelSelectOptions(selected, models) {
+function modelSelectOptions(selected: unknown, models: unknown): string {
   const current = String(selected || "").trim();
   const list = [...ollamaModelList(models)];
   if (current && !list.includes(current)) list.unshift(current);
@@ -127,28 +157,34 @@ function modelSelectOptions(selected, models) {
       (m) =>
         `<option value="${escapeHtml(m)}"${
           m === current ? " selected" : ""
-        }>${escapeHtml(m)}</option>`
+        }>${escapeHtml(m)}</option>`,
     )
     .join("");
 }
 
-function fillModelSelect(selectEl, selected, models) {
+function fillModelSelect(
+  selectEl: HTMLSelectElement | null | undefined,
+  selected: unknown,
+  models: unknown,
+): void {
   if (!selectEl) return;
   const prev = selected != null ? selected : selectEl.value;
   selectEl.innerHTML = modelSelectOptions(prev, models);
 }
 
-function fillOllamaModels(models) {
+function fillOllamaModels(models: unknown): void {
   const list = ollamaModelList(models);
   if (snapshot?.ollama) snapshot.ollama.models = list;
   fillModelSelect(el.newCrawlModel, el.newCrawlModel?.value, list);
   fillModelSelect(el.newAntibotModel, el.newAntibotModel?.value, list);
-  $$('select[data-role="crawl-model"], select[data-role="antibot-model"]').forEach(
-    (node) => fillModelSelect(node, node.value, list)
-  );
+  $$<HTMLSelectElement>(
+    'select[data-role="crawl-model"], select[data-role="antibot-model"]',
+  ).forEach((node) => fillModelSelect(node, node.value, list));
 }
 
-async function refreshOllamaModelsForSelect(selectEl) {
+async function refreshOllamaModelsForSelect(
+  selectEl: HTMLSelectElement | null | undefined,
+): Promise<void> {
   if (!selectEl) return;
   try {
     const baseUrl =
@@ -170,7 +206,7 @@ async function refreshOllamaModelsForSelect(selectEl) {
   }
 }
 
-function renderOllama(ollama) {
+function renderOllama(ollama: OllamaConfig | null | undefined): void {
   if (!el.ollamaEnabled || !el.ollamaUrl) return;
   const cfg = ollama || {};
   el.ollamaEnabled.checked = cfg.enabled !== false;
@@ -190,14 +226,14 @@ function renderOllama(ollama) {
   }
 }
 
-function setSerperStatus(text, kind) {
+function setSerperStatus(text: string, kind: "" | "ok" | "err"): void {
   if (!el.serperStatus) return;
   el.serperStatus.textContent = text || "";
   el.serperStatus.classList.remove("ok", "err");
   if (kind) el.serperStatus.classList.add(kind);
 }
 
-function renderSerper(serper) {
+function renderSerper(serper: SerperConfig | null | undefined): void {
   if (!el.serperEnabled || !el.serperKey) return;
   const cfg = serper || {};
   el.serperEnabled.checked = cfg.enabled !== false;
@@ -213,14 +249,14 @@ function renderSerper(serper) {
   }
 }
 
-function setHostWgStatus(text, kind) {
+function setHostWgStatus(text: string, kind: "" | "ok" | "err"): void {
   if (!el.hostWgStatus) return;
   el.hostWgStatus.textContent = text || "";
   el.hostWgStatus.classList.remove("ok", "err");
   if (kind) el.hostWgStatus.classList.add(kind);
 }
 
-function renderHostWg(hostWg) {
+function renderHostWg(hostWg: HostWgConfig | null | undefined): void {
   if (!el.hostWgName || !el.hostWgConfig) return;
   const cfg = hostWg || {};
   if (document.activeElement !== el.hostWgName) {
@@ -233,17 +269,17 @@ function renderHostWg(hostWg) {
     if (cfg.up) {
       setHostWgStatus(
         `Exitly trzyma tunel ${cfg.name || "wg0"} — CRM LAN OK`,
-        "ok"
+        "ok",
       );
     } else if (cfg.managed) {
       setHostWgStatus(
         `Config OK · Exitly podniesie ${cfg.name || "wg0"} przy starcie`,
-        ""
+        "",
       );
     } else {
       setHostWgStatus(
         `Config ${cfg.name || "wg0"} zapisany — włącz „CRM (Exitly)” na projekcie`,
-        ""
+        "",
       );
     }
   } else {
@@ -251,7 +287,11 @@ function renderHostWg(hostWg) {
   }
 }
 
-function fillCountrySelect(select, countries, active) {
+function fillCountrySelect(
+  select: HTMLSelectElement | null | undefined,
+  countries: Country[] | null | undefined,
+  active: string,
+): void {
   if (!select) return;
   select.innerHTML = "";
   for (const c of countries || []) {
@@ -263,17 +303,17 @@ function fillCountrySelect(select, countries, active) {
   }
 }
 
-function countryFromExit(exit, snap) {
+function countryFromExit(exit: string | undefined, snap: Snapshot | null | undefined): string {
   if (!exit || exit === "proton-vpn") return snap?.active || "ro";
   const m = String(exit).match(/^vpn-([a-z]{2})$/i);
-  if (m) return m[1].toLowerCase();
+  if (m?.[1]) return m[1].toLowerCase();
   if (/^exitly-vpn-/.test(String(exit))) return snap?.active || "ro";
   return String(exit).toLowerCase();
 }
 
-function appendProjectLog(line) {
-  const pre = document.querySelector(
-    `.project-card[data-id="${selectedProjectId}"] [data-role="project-log"]`
+function appendProjectLog(line: string): void {
+  const pre = document.querySelector<HTMLPreElement>(
+    `.project-card[data-id="${selectedProjectId}"] [data-role="project-log"]`,
   );
   if (!pre) return;
   projectLogBuffer += `${line}\n`;
@@ -284,7 +324,7 @@ function appendProjectLog(line) {
   pre.scrollTop = pre.scrollHeight;
 }
 
-async function attachProjectLogs(id) {
+async function attachProjectLogs(id: string): Promise<void> {
   if (selectedProjectId && selectedProjectId !== id) {
     await api().stopProjectLogs(selectedProjectId);
   }
@@ -292,21 +332,21 @@ async function attachProjectLogs(id) {
   projectLogBuffer = "";
   try {
     const res = await api().getProjectLogs(id);
-    projectLogBuffer = res?.text || "";
-    const pre = document.querySelector(
-      `.project-card[data-id="${id}"] [data-role="project-log"]`
+    projectLogBuffer = typeof res === "string" ? res : res?.text || "";
+    const pre = document.querySelector<HTMLPreElement>(
+      `.project-card[data-id="${id}"] [data-role="project-log"]`,
     );
     if (pre) {
       pre.textContent = projectLogBuffer || "(brak logów)\n";
       pre.scrollTop = pre.scrollHeight;
     }
     await api().followProjectLogs(id);
-  } catch (err) {
-    appendProjectLog(`(logi: ${err.message || err})`);
+  } catch (err: unknown) {
+    appendProjectLog(`(logi: ${errMsg(err)})`);
   }
 }
 
-async function detachProjectLogs() {
+async function detachProjectLogs(): Promise<void> {
   if (!selectedProjectId) return;
   try {
     await api().stopProjectLogs(selectedProjectId);
@@ -317,7 +357,7 @@ async function detachProjectLogs() {
   projectLogBuffer = "";
 }
 
-function renderProjects(snap) {
+function renderProjects(snap: Snapshot): void {
   const projects = (snap.crawlers || []).filter((c) => c.kind === "project");
   el.projectList.innerHTML = "";
 
@@ -331,7 +371,7 @@ function renderProjects(snap) {
   }
 
   if (selectedProjectId && !projects.some((p) => p.id === selectedProjectId)) {
-    detachProjectLogs();
+    void detachProjectLogs();
   }
 
   for (const item of projects) {
@@ -351,7 +391,7 @@ function renderProjects(snap) {
         (c) =>
           `<option value="${escapeHtml(c.code)}" ${
             c.code === country ? "selected" : ""
-          }>${escapeHtml(c.code.toUpperCase())} — ${escapeHtml(c.name)}</option>`
+          }>${escapeHtml(c.code.toUpperCase())} — ${escapeHtml(c.name)}</option>`,
       )
       .join("");
 
@@ -365,7 +405,7 @@ function renderProjects(snap) {
     const cliShells = Array.isArray(snap.cliShells) ? snap.cliShells : [];
     const currentCliBase = pathBasename(item.cliCommand || "opencode").replace(
       /\.(exe|cmd|bat)$/i,
-      ""
+      "",
     );
     const cliShellOptions = (() => {
       const opts = cliShells.map((s) => {
@@ -381,8 +421,8 @@ function renderProjects(snap) {
       if (currentCliBase && !known.has(currentCliBase)) {
         opts.push(
           `<option value="${escapeHtml(currentCliBase)}" selected>${escapeHtml(
-            currentCliBase
-          )} (custom)</option>`
+            currentCliBase,
+          )} (custom)</option>`,
         );
       }
       return opts.join("");
@@ -401,7 +441,7 @@ function renderProjects(snap) {
         (n) =>
           `<option value="${n}" ${n === workers ? "selected" : ""}>${n}${
             n === 1 ? " (bezpiecznie)" : n >= 3 ? " (ryzyko blokady)" : ""
-          }</option>`
+          }</option>`,
       )
       .join("");
     const cliMetaHtml = isCli
@@ -410,7 +450,7 @@ function renderProjects(snap) {
           <select data-role="cli-shell">${cliShellOptions}</select>
         </label>
         <p class="project-cli-meta">Uruchom: <code>${escapeHtml(
-          item.cliCommand || cliLabel
+          item.cliCommand || cliLabel,
         )}</code>${
           (item.cliArgs || []).length
             ? ` ${(item.cliArgs || []).map(escapeHtml).join(" ")}`
@@ -430,14 +470,14 @@ function renderProjects(snap) {
           <span>${isCli ? "Model Ollama" : "Model crawl4ai"}</span>
           <select data-role="crawl-model">${modelSelectOptions(
             crawlModel,
-            ollamaModels
+            ollamaModels,
           )}</select>
         </label>
         <label class="field">
           <span>${isCli ? "Model CaptchaMind" : "Model antybot"}</span>
           <select data-role="antibot-model">${modelSelectOptions(
             antibotModel,
-            ollamaModels
+            ollamaModels,
           )}</select>
         </label>
         ${
@@ -475,7 +515,7 @@ function renderProjects(snap) {
               placeholder="${escapeHtml(f.placeholder || f.key)}"
               value="${escapeHtml(f.value || "")}"
             />
-          </label>`
+          </label>`,
             )
             .join("")}
           <button type="button" class="ghost tiny" data-role="save-env-inline">Zapisz env</button>
@@ -554,14 +594,14 @@ function renderProjects(snap) {
       </div>
     `;
 
-    const logsPanel = card.querySelector('[data-role="logs-panel"]');
+    const logsPanel = requireEl<HTMLElement>(card, '[data-role="logs-panel"]');
     if (!open) logsPanel.classList.add("hidden");
     if (open) {
-      const pre = card.querySelector('[data-role="project-log"]');
+      const pre = requireEl<HTMLPreElement>(card, '[data-role="project-log"]');
       pre.textContent = projectLogBuffer || "(ładowanie…)\n";
     }
 
-    const ipLine = card.querySelector('[data-role="ip-line"]');
+    const ipLine = requireEl<HTMLElement>(card, '[data-role="ip-line"]');
     const cachedIp = projectIpCache.get(item.id);
     if (cachedIp) {
       ipLine.textContent = formatProjectIpLine(cachedIp);
@@ -569,14 +609,19 @@ function renderProjects(snap) {
       ipLine.classList.toggle("warn", !cachedIp.ip || !!cachedIp.error);
     }
 
-    card.querySelector('[data-role="country"]').addEventListener("change", (e) => {
-      changeProjectCountry(item, e.target.value);
-    });
+    requireEl<HTMLSelectElement>(card, '[data-role="country"]').addEventListener(
+      "change",
+      (e) => {
+        changeProjectCountry(item, (e.target as HTMLSelectElement).value);
+      },
+    );
 
-    const cliShellSelect = card.querySelector('[data-role="cli-shell"]');
+    const cliShellSelect = card.querySelector<HTMLSelectElement>(
+      '[data-role="cli-shell"]',
+    );
     if (cliShellSelect) {
       cliShellSelect.addEventListener("change", (e) => {
-        const command = (e.target.value || "").trim();
+        const command = ((e.target as HTMLSelectElement).value || "").trim();
         if (!command) return;
         withBusy(async () => {
           log(`${item.name}: shell → ${command}`);
@@ -585,67 +630,79 @@ function renderProjects(snap) {
       });
     }
 
-    const hostWgToggle = card.querySelector('[data-role="host-wg"]');
+    const hostWgToggle = card.querySelector<HTMLInputElement>('[data-role="host-wg"]');
     if (hostWgToggle) {
       hostWgToggle.addEventListener("change", (e) => {
-        const on = !!e.target.checked;
+        const target = e.target as HTMLInputElement;
+        const on = !!target.checked;
         withBusy(async () => {
           try {
             log(
-              `${item.name}: CRM (Exitly) ${on ? "WŁĄCZONE — apka trzyma tunel" : "wyłączone"}`
+              `${item.name}: CRM (Exitly) ${on ? "WŁĄCZONE — apka trzyma tunel" : "wyłączone"}`,
             );
             return await api().setProjectUseHostWg(item.id, on);
-          } catch (err) {
-            e.target.checked = !on;
+          } catch (err: unknown) {
+            target.checked = !on;
             throw err;
           }
         });
       });
     }
 
-    const crawlSelect = card.querySelector('[data-role="crawl-model"]');
-    const antibotSelect = card.querySelector('[data-role="antibot-model"]');
-    const workersSelect = card.querySelector('[data-role="workers"]');
+    const crawlSelect = card.querySelector<HTMLSelectElement>('[data-role="crawl-model"]');
+    const antibotSelect = card.querySelector<HTMLSelectElement>(
+      '[data-role="antibot-model"]',
+    );
+    const workersSelect = card.querySelector<HTMLSelectElement>('[data-role="workers"]');
 
-    const saveModelsBtn = card.querySelector('[data-role="save-models"]');
+    const saveModelsBtn = card.querySelector<HTMLButtonElement>(
+      '[data-role="save-models"]',
+    );
     if (saveModelsBtn) {
       saveModelsBtn.addEventListener("click", () => {
-        const crawl =
-          (crawlSelect?.value || "").trim() || "qwen2.5:14b";
-        const antibot =
-          (antibotSelect?.value || "").trim() || "captchamind:7b";
-        const payload = {
+        const crawl = (crawlSelect?.value || "").trim() || "qwen2.5:14b";
+        const antibot = (antibotSelect?.value || "").trim() || "captchamind:7b";
+        const payload: {
+          crawlModel: string;
+          antibotModel: string;
+          workers?: number;
+        } = {
           crawlModel: crawl,
           antibotModel: antibot,
         };
         if (!isCli) {
           payload.workers = Math.min(
             8,
-            Math.max(1, Number.parseInt(workersSelect?.value || "1", 10) || 1)
+            Math.max(1, Number.parseInt(workersSelect?.value || "1", 10) || 1),
           );
         }
         withBusy(async () => {
           log(
             isCli
               ? `${item.name}: ollama=${crawl} captcha=${antibot}`
-              : `${item.name}: crawl=${crawl} antybot=${antibot} workers=${payload.workers}`
+              : `${item.name}: crawl=${crawl} antybot=${antibot} workers=${payload.workers}`,
           );
           return api().setProjectModels(item.id, payload);
         });
       });
     }
 
-    const envBtn = card.querySelector('[data-role="env"]');
+    const envBtn = card.querySelector<HTMLButtonElement>('[data-role="env"]');
     if (envBtn) {
-      envBtn.addEventListener("click", () => openEnvModal(item));
+      envBtn.addEventListener("click", () => {
+        void openEnvModal(item);
+      });
     }
 
-    const saveEnvInline = card.querySelector('[data-role="save-env-inline"]');
+    const saveEnvInline = card.querySelector<HTMLButtonElement>(
+      '[data-role="save-env-inline"]',
+    );
     if (saveEnvInline) {
       saveEnvInline.addEventListener("click", () => {
-        const values = {};
-        card.querySelectorAll("[data-env-key]").forEach((input) => {
-          values[input.getAttribute("data-env-key")] = input.value || "";
+        const values: Record<string, string> = {};
+        card.querySelectorAll<HTMLInputElement>("[data-env-key]").forEach((input) => {
+          const key = input.getAttribute("data-env-key");
+          if (key) values[key] = input.value || "";
         });
         withBusy(async () => {
           log(`${item.name}: zapisuję env projektu`);
@@ -654,12 +711,14 @@ function renderProjects(snap) {
       });
     }
 
-    const editOptsBtn = card.querySelector('[data-role="edit-options"]');
+    const editOptsBtn = card.querySelector<HTMLButtonElement>(
+      '[data-role="edit-options"]',
+    );
     if (editOptsBtn) {
       editOptsBtn.addEventListener("click", () => openEditOptionsPrompt(item));
     }
 
-    const testMcpBtn = card.querySelector('[data-role="test-mcp"]');
+    const testMcpBtn = card.querySelector<HTMLButtonElement>('[data-role="test-mcp"]');
     if (testMcpBtn) {
       testMcpBtn.addEventListener("click", () => {
         withBusy(async () => {
@@ -668,112 +727,136 @@ function renderProjects(snap) {
           log(
             res?.ok
               ? `${item.name}: MCP OK ${res.host}:${res.port}`
-              : `${item.name}: MCP ${res?.error || "offline"}`
+              : `${item.name}: MCP ${res?.error || "offline"}`,
           );
           return null;
         });
       });
     }
 
-    card.querySelector('[data-role="check-ip"]').addEventListener("click", async () => {
-      ipLine.textContent = "IP: sprawdzam…";
-      ipLine.classList.remove("ok", "warn");
-      try {
-        const info = await api().checkProjectIp(item.id);
-        projectIpCache.set(item.id, info);
-        ipLine.textContent = formatProjectIpLine(info);
-        ipLine.classList.toggle("ok", !!info.ip && !info.error);
-        ipLine.classList.toggle("warn", !info.ip || !!info.error);
-        if (info.ip) {
-          log(
-            `${item.name}: ${info.ip}${info.country ? ` ${info.country}` : ""}${
-              info.org ? ` · ${info.org}` : ""
-            }`
-          );
-        } else if (info.error) {
-          setError(info.error);
+    requireEl<HTMLButtonElement>(card, '[data-role="check-ip"]').addEventListener(
+      "click",
+      async () => {
+        ipLine.textContent = "IP: sprawdzam…";
+        ipLine.classList.remove("ok", "warn");
+        try {
+          const info = await api().checkProjectIp(item.id);
+          projectIpCache.set(item.id, info);
+          ipLine.textContent = formatProjectIpLine(info);
+          ipLine.classList.toggle("ok", !!info.ip && !info.error);
+          ipLine.classList.toggle("warn", !info.ip || !!info.error);
+          if (info.ip) {
+            log(
+              `${item.name}: ${info.ip}${info.country ? ` ${info.country}` : ""}${
+                info.org ? ` · ${info.org}` : ""
+              }`,
+            );
+          } else if (info.error) {
+            setError(info.error);
+          }
+        } catch (err: unknown) {
+          ipLine.textContent = "IP: błąd";
+          ipLine.classList.add("warn");
+          setError(errMsg(err));
         }
-      } catch (err) {
-        ipLine.textContent = "IP: błąd";
-        ipLine.classList.add("warn");
-        setError(err.message || String(err));
-      }
-    });
+      },
+    );
 
-    card.querySelector('[data-role="toggle"]').addEventListener("click", () => {
-      withBusy(async () => {
-        if (running) {
-          log(`Wyłączam ${item.name}`);
-          const snapOut = await api().stopCrawler(item.id);
-          if (selectedProjectId === item.id) await attachProjectLogs(item.id);
+    requireEl<HTMLButtonElement>(card, '[data-role="toggle"]').addEventListener(
+      "click",
+      () => {
+        withBusy(async () => {
+          if (running) {
+            log(`Wyłączam ${item.name}`);
+            const snapOut = await api().stopCrawler(item.id);
+            if (selectedProjectId === item.id) await attachProjectLogs(item.id);
+            return snapOut;
+          }
+          const optionValues = collectStartOptionValues(card);
+          log(isCli ? `Uruchamiam CLI ${item.name}` : `Włączam ${item.name}`);
+          const snapOut = await api().startCrawler(item.id, optionValues);
+          selectedProjectId = item.id;
+          await attachProjectLogs(item.id);
           return snapOut;
+        });
+      },
+    );
+
+    requireEl<HTMLButtonElement>(card, '[data-role="logs"]').addEventListener(
+      "click",
+      async () => {
+        if (selectedProjectId === item.id) {
+          await detachProjectLogs();
+          if (snapshot) renderProjects(snapshot);
+          return;
         }
-        const optionValues = collectStartOptionValues(card);
-        log(isCli ? `Uruchamiam CLI ${item.name}` : `Włączam ${item.name}`);
-        const snapOut = await api().startCrawler(item.id, optionValues);
         selectedProjectId = item.id;
+        if (snapshot) renderProjects(snapshot);
         await attachProjectLogs(item.id);
-        return snapOut;
-      });
-    });
+      },
+    );
 
-    card.querySelector('[data-role="logs"]').addEventListener("click", async () => {
-      if (selectedProjectId === item.id) {
-        await detachProjectLogs();
-        renderProjects(snapshot);
-        return;
-      }
-      selectedProjectId = item.id;
-      renderProjects(snapshot);
-      await attachProjectLogs(item.id);
-    });
+    requireEl<HTMLButtonElement>(card, '[data-role="refresh-logs"]').addEventListener(
+      "click",
+      async () => {
+        await attachProjectLogs(item.id);
+      },
+    );
 
-    card.querySelector('[data-role="refresh-logs"]').addEventListener("click", async () => {
-      await attachProjectLogs(item.id);
-    });
+    requireEl<HTMLButtonElement>(card, '[data-role="cursor"]').addEventListener(
+      "click",
+      async () => {
+        try {
+          await api().openInCursor(item.id);
+        } catch (err: unknown) {
+          setError(errMsg(err));
+        }
+      },
+    );
 
-    card.querySelector('[data-role="cursor"]').addEventListener("click", async () => {
-      try {
-        await api().openInCursor(item.id);
-      } catch (err) {
-        setError(err.message || String(err));
-      }
-    });
+    requireEl<HTMLButtonElement>(card, '[data-role="export"]').addEventListener(
+      "click",
+      () => {
+        withBusy(async () => {
+          log(`Eksportuję ${item.name}`);
+          const out = await api().exportProject(item.id);
+          if (out?.path) log(`Zapisano: ${out.path}`);
+          return null;
+        });
+      },
+    );
 
-    card.querySelector('[data-role="export"]').addEventListener("click", () => {
-      withBusy(async () => {
-        log(`Eksportuję ${item.name}`);
-        const out = await api().exportProject(item.id);
-        if (out?.path) log(`Zapisano: ${out.path}`);
-        return null;
-      });
-    });
+    requireEl<HTMLButtonElement>(card, '[data-role="duplicate"]').addEventListener(
+      "click",
+      () => {
+        openDupModal(item);
+      },
+    );
 
-    card.querySelector('[data-role="duplicate"]').addEventListener("click", () => {
-      openDupModal(item);
-    });
-
-    card.querySelector('[data-role="remove"]').addEventListener("click", () => {
-      if (!confirm(`Usunąć „${item.name}” z listy?\nFolder na dysku zostaje.`)) return;
-      withBusy(async () => {
-        if (selectedProjectId === item.id) await detachProjectLogs();
-        projectIpCache.delete(item.id);
-        log(`Usuwam ${item.name}`);
-        return api().removeCrawler(item.id);
-      });
-    });
+    requireEl<HTMLButtonElement>(card, '[data-role="remove"]').addEventListener(
+      "click",
+      () => {
+        if (!confirm(`Usunąć „${item.name}” z listy?\nFolder na dysku zostaje.`)) return;
+        withBusy(async () => {
+          if (selectedProjectId === item.id) await detachProjectLogs();
+          projectIpCache.delete(item.id);
+          log(`Usuwam ${item.name}`);
+          return api().removeCrawler(item.id);
+        });
+      },
+    );
 
     el.projectList.appendChild(card);
   }
 }
 
-function pathBasename(p) {
+function pathBasename(p: unknown): string {
   const s = String(p || "");
   const parts = s.split(/[/\\]/);
   return parts[parts.length - 1] || s;
 }
 
-function renderStartOptionInput(opt, value) {
+function renderStartOptionInput(opt: StartOption, value: unknown): string {
   const v = value != null ? value : opt.default || "";
   const req = opt.required ? " *" : "";
   if (opt.type === "checkbox") {
@@ -793,7 +876,7 @@ function renderStartOptionInput(opt, value) {
             (c) =>
               `<option value="${escapeHtml(c)}" ${
                 String(c) === String(v) ? "selected" : ""
-              }>${escapeHtml(c)}</option>`
+              }>${escapeHtml(c)}</option>`,
           )
           .join("")}
       </select>
@@ -810,21 +893,23 @@ function renderStartOptionInput(opt, value) {
   </label>`;
 }
 
-function collectStartOptionValues(card) {
-  const values = {};
-  card.querySelectorAll("[data-opt-id]").forEach((node) => {
-    const id = node.getAttribute("data-opt-id");
-    if (!id) return;
-    if (node.type === "checkbox") {
-      values[id] = node.checked ? "1" : "0";
-    } else {
-      values[id] = node.value || "";
-    }
-  });
+function collectStartOptionValues(card: ParentNode): Record<string, string> {
+  const values: Record<string, string> = {};
+  card.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-opt-id]").forEach(
+    (node) => {
+      const id = node.getAttribute("data-opt-id");
+      if (!id) return;
+      if (node instanceof HTMLInputElement && node.type === "checkbox") {
+        values[id] = node.checked ? "1" : "0";
+      } else {
+        values[id] = node.value || "";
+      }
+    },
+  );
   return values;
 }
 
-function renderNewOptionRow(opt = {}) {
+function renderNewOptionRow(opt: Partial<StartOption> = {}): HTMLDivElement {
   const row = document.createElement("div");
   row.className = "option-row";
   row.innerHTML = `
@@ -834,7 +919,7 @@ function renderNewOptionRow(opt = {}) {
       ${["text", "number", "checkbox", "select"]
         .map(
           (t) =>
-            `<option value="${t}" ${opt.type === t ? "selected" : ""}>${t}</option>`
+            `<option value="${t}" ${opt.type === t ? "selected" : ""}>${t}</option>`,
         )
         .join("")}
     </select>
@@ -842,7 +927,7 @@ function renderNewOptionRow(opt = {}) {
       ${["env", "arg", "both"]
         .map(
           (t) =>
-            `<option value="${t}" ${(opt.apply || "env") === t ? "selected" : ""}>${t}</option>`
+            `<option value="${t}" ${(opt.apply || "env") === t ? "selected" : ""}>${t}</option>`,
         )
         .join("")}
     </select>
@@ -851,15 +936,22 @@ function renderNewOptionRow(opt = {}) {
     <input data-f="default" type="text" placeholder="domyślna" value="${escapeHtml(opt.default || "")}" />
     <button type="button" class="ghost tiny" data-f="remove">×</button>
   `;
-  row.querySelector('[data-f="remove"]').addEventListener("click", () => row.remove());
+  requireEl<HTMLButtonElement>(row, '[data-f="remove"]').addEventListener("click", () =>
+    row.remove(),
+  );
   return row;
 }
 
-function collectNewOptionsFromModal() {
+function collectNewOptionsFromModal(): StartOption[] {
   if (!el.newOptionsList) return [];
   return [...el.newOptionsList.querySelectorAll(".option-row")]
     .map((row) => {
-      const get = (f) => (row.querySelector(`[data-f="${f}"]`)?.value || "").trim();
+      const get = (f: string): string => {
+        const node = row.querySelector<HTMLInputElement | HTMLSelectElement>(
+          `[data-f="${f}"]`,
+        );
+        return (node?.value || "").trim();
+      };
       return {
         id: get("id"),
         label: get("label"),
@@ -874,13 +966,16 @@ function collectNewOptionsFromModal() {
     .filter((o) => o.id || o.label);
 }
 
-function openEditOptionsPrompt(item) {
+function openEditOptionsPrompt(item: ProjectItem): void {
   const current = (item.options || [])
-    .map((o) => `${o.id}|${o.label}|${o.type}|${o.apply || "env"}|${o.env || ""}|${o.arg || ""}|${o.default || ""}`)
+    .map(
+      (o) =>
+        `${o.id}|${o.label}|${o.type}|${o.apply || "env"}|${o.env || ""}|${o.arg || ""}|${o.default || ""}`,
+    )
     .join("\n");
   const text = prompt(
     "Opcje startu (jedna na linię):\nid|etykieta|text|env|ENV_NAME|--flag|domyślna\n\nTypy: text, number, checkbox, select\nApply: env, arg, both",
-    current || "limit|Limit|number|env|EXITLY_OPT_LIMIT|--limit|5"
+    current || "limit|Limit|number|env|EXITLY_OPT_LIMIT|--limit|5",
   );
   if (text == null) return;
   const options = text
@@ -888,8 +983,18 @@ function openEditOptionsPrompt(item) {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [id, label, type, apply, env, arg, def] = line.split("|").map((s) => (s || "").trim());
-      return { id, label, type: type || "text", apply: apply || "env", env, arg, default: def };
+      const [id, label, type, apply, env, arg, def] = line
+        .split("|")
+        .map((s) => (s || "").trim());
+      return {
+        id: id || "",
+        label: label || "",
+        type: type || "text",
+        apply: apply || "env",
+        env,
+        arg,
+        default: def,
+      };
     });
   withBusy(async () => {
     log(`${item.name}: aktualizacja opcji (${options.length})`);
@@ -900,11 +1005,11 @@ function openEditOptionsPrompt(item) {
   });
 }
 
-async function openEnvModal(item) {
+async function openEnvModal(item: ProjectItem | null | undefined): Promise<void> {
   if (!el.modalEnv || !item) return;
   envEditProjectId = item.id;
   el.envProjectName.innerHTML = `Projekt <strong>${escapeHtml(
-    item.name
+    item.name,
   )}</strong> — zapis do <code>.env</code>`;
   el.envFields.innerHTML = `<p class="meta">Ładowanie…</p>`;
   el.envHint.textContent = "";
@@ -929,7 +1034,7 @@ async function openEnvModal(item) {
           placeholder="${escapeHtml(f.placeholder || "")}"
           value="${escapeHtml(f.value || "")}"
         />
-      </label>`
+      </label>`,
       )
       .join("");
     if (data.missingRequired?.length) {
@@ -937,26 +1042,26 @@ async function openEnvModal(item) {
     } else {
       el.envHint.textContent = data.path ? `Plik: ${data.path}` : "";
     }
-  } catch (err) {
+  } catch (err: unknown) {
     el.envFields.innerHTML = "";
-    setError(err.message || String(err));
+    setError(errMsg(err));
     closeEnvModal();
   }
 }
 
-function closeEnvModal() {
+function closeEnvModal(): void {
   envEditProjectId = null;
   if (el.modalEnv) el.modalEnv.classList.add("hidden");
 }
 
-function changeProjectCountry(item, code) {
+function changeProjectCountry(item: ProjectItem, code: string): void {
   withBusy(async () => {
     log(`${item.name} → ${String(code).toUpperCase()}`);
     return api().setCrawlerExit(item.id, code);
   });
 }
 
-function renderSnapshot(snap) {
+function renderSnapshot(snap: Snapshot): void {
   snapshot = snap;
 
   if (snap.setupNeeded) {
@@ -976,18 +1081,18 @@ function renderSnapshot(snap) {
   renderHostWg(snap.hostWg);
 }
 
-async function refresh() {
+async function refresh(): Promise<void> {
   setError("");
   try {
     const snap = await api().getSnapshot();
     if (!snap.ok && snap.error) setError(snap.error);
     renderSnapshot(snap);
-  } catch (err) {
-    setError(err.message || String(err));
+  } catch (err: unknown) {
+    setError(errMsg(err));
   }
 }
 
-function openNewModal() {
+function openNewModal(): void {
   el.newName.value = "";
   fillCountrySelect(el.newCountry, snapshot?.countries, snapshot?.active || "ro");
   const defaults = snapshot?.ollama?.defaults || {};
@@ -995,14 +1100,14 @@ function openNewModal() {
   fillModelSelect(
     el.newCrawlModel,
     defaults.crawlModel || "qwen2.5:14b",
-    models
+    models,
   );
   fillModelSelect(
     el.newAntibotModel,
     defaults.antibotModel || "captchamind:7b",
-    models
+    models,
   );
-  refreshOllamaModelsForSelect(el.newCrawlModel);
+  void refreshOllamaModelsForSelect(el.newCrawlModel);
   if (el.newOptionsList) {
     el.newOptionsList.innerHTML = "";
   }
@@ -1010,11 +1115,11 @@ function openNewModal() {
   el.newName.focus();
 }
 
-function closeNewModal() {
+function closeNewModal(): void {
   el.modalNew.classList.add("hidden");
 }
 
-function openDupModal(item) {
+function openDupModal(item: ProjectItem): void {
   dupSourceId = item.id;
   dupFolderTouched = false;
   const suggestedName = `${item.name} kopia`;
@@ -1030,7 +1135,7 @@ function openDupModal(item) {
   el.dupName.select();
 }
 
-function closeDupModal() {
+function closeDupModal(): void {
   el.modalDup.classList.add("hidden");
   dupSourceId = null;
   dupFolderTouched = false;
@@ -1063,9 +1168,9 @@ $("#btn-ollama-test").addEventListener("click", async () => {
       setOllamaStatus(`Błąd: ${result.error || "niedostępna"}`, "err");
       log(`Ollama błąd: ${result.error || "?"}`);
     }
-  } catch (err) {
-    setOllamaStatus(`Błąd: ${err.message || err}`, "err");
-    setError(err.message || String(err));
+  } catch (err: unknown) {
+    setOllamaStatus(`Błąd: ${errMsg(err)}`, "err");
+    setError(errMsg(err));
   }
 });
 
@@ -1095,9 +1200,9 @@ $("#btn-hostwg-test")?.addEventListener("click", async () => {
     log("CRM LAN: Exitly OK");
     const snap = await api().getSnapshot();
     if (snap) renderSnapshot(snap);
-  } catch (err) {
-    setHostWgStatus(err.message || String(err), "err");
-    setError(err.message || String(err));
+  } catch (err: unknown) {
+    setHostWgStatus(errMsg(err), "err");
+    setError(errMsg(err));
   }
 });
 
@@ -1114,9 +1219,9 @@ $("#btn-serper-test").addEventListener("click", async () => {
       setSerperStatus(`Błąd: ${result.error || "niedostępny"}`, "err");
       log(`Serper błąd: ${result.error || "?"}`);
     }
-  } catch (err) {
-    setSerperStatus(`Błąd: ${err.message || err}`, "err");
-    setError(err.message || String(err));
+  } catch (err: unknown) {
+    setSerperStatus(`Błąd: ${errMsg(err)}`, "err");
+    setError(errMsg(err));
   }
 });
 
@@ -1183,9 +1288,10 @@ el.modalEnv.addEventListener("click", (e) => {
 });
 $("#btn-env-save").addEventListener("click", () => {
   if (!envEditProjectId) return;
-  const values = {};
-  el.envFields.querySelectorAll("[data-env-key]").forEach((input) => {
-    values[input.getAttribute("data-env-key")] = input.value || "";
+  const values: Record<string, string> = {};
+  el.envFields.querySelectorAll<HTMLInputElement>("[data-env-key]").forEach((input) => {
+    const key = input.getAttribute("data-env-key");
+    if (key) values[key] = input.value || "";
   });
   withBusy(async () => {
     log("Zapisuję .env projektu");
@@ -1292,16 +1398,19 @@ api().onProjectLog((payload) => {
   appendProjectLog(payload.line);
 });
 
-function showUpdateBanner(visible) {
+function showUpdateBanner(visible: boolean): void {
   el.updateBanner.classList.toggle("hidden", !visible);
 }
 
-function setUpdateButtons({ download = false, install = false } = {}) {
+function setUpdateButtons(
+  opts: { download?: boolean; install?: boolean } = {},
+): void {
+  const { download = false, install = false } = opts;
   el.btnUpdateDownload.classList.toggle("hidden", !download);
   el.btnUpdateInstall.classList.toggle("hidden", !install);
 }
 
-function handleUpdateStatus(payload) {
+function handleUpdateStatus(payload: UpdateStatusPayload | null | undefined): void {
   if (!payload) return;
   switch (payload.state) {
     case "checking":
@@ -1364,13 +1473,13 @@ $("#btn-update-check").addEventListener("click", async () => {
 el.btnUpdateDownload.addEventListener("click", async () => {
   try {
     await api().downloadUpdate();
-  } catch (err) {
-    setError(err.message || String(err));
+  } catch (err: unknown) {
+    setError(errMsg(err));
   }
 });
 
 el.btnUpdateInstall.addEventListener("click", () => {
-  api().installUpdate();
+  void api().installUpdate();
 });
 
 api().onUpdateStatus(handleUpdateStatus);
@@ -1383,9 +1492,9 @@ api().onUpdateStatus(handleUpdateStatus);
   } catch {
     /* ignore */
   }
-  refresh();
+  void refresh();
 })();
 
 setInterval(() => {
-  if (!isBusy()) refresh();
+  if (!isBusy()) void refresh();
 }, 15000);

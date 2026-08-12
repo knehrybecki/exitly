@@ -15,8 +15,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            args: --mac
+          # Apple Silicon only (M1–M5). Do not build x64 — breaks on arm64 Macs.
+          - os: macos-14
+            args: --mac --arm64
           - os: ubuntu-latest
             args: --linux
           - os: windows-latest

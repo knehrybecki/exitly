@@ -1,7 +1,4 @@
-/** @ts-nocheck */
-import { escapeHtml } from "../ui";
-
-export function slugifyFolderName(name) {
+export function slugifyFolderName(name: string): string {
   return (
     String(name || "")
       .toLowerCase()
@@ -11,7 +8,7 @@ export function slugifyFolderName(name) {
   );
 }
 
-export function parentDirOf(filePath) {
+export function parentDirOf(filePath: string): string {
   const s = String(filePath || "").replace(/[/\\]+$/, "");
   const idx = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\"));
   return idx > 0 ? s.slice(0, idx) : s;

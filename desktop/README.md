@@ -4,9 +4,9 @@ Cross-platform Electron app (TypeScript) for Exitly projects.
 
 | Platform | Installer |
 |----------|-----------|
-| macOS | `.dmg` / `.zip` |
+| macOS (Apple Silicon / arm64) | `.zip` |
 | Windows | NSIS `.exe` |
-| Linux | `.AppImage` / `.deb` |
+| Linux | `.AppImage` |
 
 In-app updates use GitHub Releases (`electron-updater`).
 

@@ -14,6 +14,11 @@
   // src/renderer/ui.ts
   var $ = (sel) => document.querySelector(sel);
   var $$ = (sel) => [...document.querySelectorAll(sel)];
+  function requireEl(root, sel) {
+    const node = root.querySelector(sel);
+    if (!node) throw new Error(`Missing element: ${sel}`);
+    return node;
+  }
   function escapeHtml(value) {
     return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
@@ -61,6 +66,9 @@
   }
 
   // src/renderer/main.ts
+  function errMsg(err) {
+    return err instanceof Error ? err.message : String(err);
+  }
   var el = {
     setup: $("#setup"),
     main: $("#main-ui"),
@@ -121,10 +129,13 @@
     setBusy2(true);
     setError2("");
     return Promise.resolve().then(fn).then((snap) => {
-      if (snap) renderSnapshot(snap);
-      return snap;
+      if (snap && typeof snap === "object") {
+        renderSnapshot(snap);
+        return snap;
+      }
+      return null;
     }).catch((err) => {
-      setError2(err.message || String(err));
+      setError2(errMsg(err));
       return null;
     }).finally(() => setBusy2(false));
   }
@@ -162,7 +173,7 @@
     if (kind) el.ollamaStatus.classList.add(kind);
   }
   function ollamaModelList(models) {
-    return Array.isArray(models) ? models.filter(Boolean) : [];
+    return Array.isArray(models) ? models.filter((m) => !!m) : [];
   }
   function modelSelectOptions(selected, models) {
     const current = String(selected || "").trim();
@@ -186,9 +197,9 @@
     if (snapshot?.ollama) snapshot.ollama.models = list;
     fillModelSelect(el.newCrawlModel, el.newCrawlModel?.value, list);
     fillModelSelect(el.newAntibotModel, el.newAntibotModel?.value, list);
-    $$('select[data-role="crawl-model"], select[data-role="antibot-model"]').forEach(
-      (node) => fillModelSelect(node, node.value, list)
-    );
+    $$(
+      'select[data-role="crawl-model"], select[data-role="antibot-model"]'
+    ).forEach((node) => fillModelSelect(node, node.value, list));
   }
   async function refreshOllamaModelsForSelect(selectEl) {
     if (!selectEl) return;
@@ -297,7 +308,7 @@
   function countryFromExit(exit, snap) {
     if (!exit || exit === "proton-vpn") return snap?.active || "ro";
     const m = String(exit).match(/^vpn-([a-z]{2})$/i);
-    if (m) return m[1].toLowerCase();
+    if (m?.[1]) return m[1].toLowerCase();
     if (/^exitly-vpn-/.test(String(exit))) return snap?.active || "ro";
     return String(exit).toLowerCase();
   }
@@ -322,7 +333,7 @@
     projectLogBuffer = "";
     try {
       const res = await api().getProjectLogs(id);
-      projectLogBuffer = res?.text || "";
+      projectLogBuffer = typeof res === "string" ? res : res?.text || "";
       const pre = document.querySelector(
         `.project-card[data-id="${id}"] [data-role="project-log"]`
       );
@@ -332,7 +343,7 @@
       }
       await api().followProjectLogs(id);
     } catch (err) {
-      appendProjectLog(`(logi: ${err.message || err})`);
+      appendProjectLog(`(logi: ${errMsg(err)})`);
     }
   }
   async function detachProjectLogs() {
@@ -356,7 +367,7 @@
       return;
     }
     if (selectedProjectId && !projects.some((p) => p.id === selectedProjectId)) {
-      detachProjectLogs();
+      void detachProjectLogs();
     }
     for (const item of projects) {
       const running = !!item.running;
@@ -500,23 +511,28 @@
         <pre class="project-log" data-role="project-log"></pre>
       </div>
     `;
-      const logsPanel = card.querySelector('[data-role="logs-panel"]');
+      const logsPanel = requireEl(card, '[data-role="logs-panel"]');
       if (!open) logsPanel.classList.add("hidden");
       if (open) {
-        const pre = card.querySelector('[data-role="project-log"]');
+        const pre = requireEl(card, '[data-role="project-log"]');
         pre.textContent = projectLogBuffer || "(\u0142adowanie\u2026)\n";
       }
-      const ipLine = card.querySelector('[data-role="ip-line"]');
+      const ipLine = requireEl(card, '[data-role="ip-line"]');
       const cachedIp = projectIpCache.get(item.id);
       if (cachedIp) {
         ipLine.textContent = formatProjectIpLine(cachedIp);
         ipLine.classList.toggle("ok", !!cachedIp.ip && !cachedIp.error);
         ipLine.classList.toggle("warn", !cachedIp.ip || !!cachedIp.error);
       }
-      card.querySelector('[data-role="country"]').addEventListener("change", (e) => {
-        changeProjectCountry(item, e.target.value);
-      });
-      const cliShellSelect = card.querySelector('[data-role="cli-shell"]');
+      requireEl(card, '[data-role="country"]').addEventListener(
+        "change",
+        (e) => {
+          changeProjectCountry(item, e.target.value);
+        }
+      );
+      const cliShellSelect = card.querySelector(
+        '[data-role="cli-shell"]'
+      );
       if (cliShellSelect) {
         cliShellSelect.addEventListener("change", (e) => {
           const command = (e.target.value || "").trim();
@@ -530,7 +546,8 @@
       const hostWgToggle = card.querySelector('[data-role="host-wg"]');
       if (hostWgToggle) {
         hostWgToggle.addEventListener("change", (e) => {
-          const on = !!e.target.checked;
+          const target = e.target;
+          const on = !!target.checked;
           withBusy(async () => {
             try {
               log2(
@@ -538,16 +555,20 @@
               );
               return await api().setProjectUseHostWg(item.id, on);
             } catch (err) {
-              e.target.checked = !on;
+              target.checked = !on;
               throw err;
             }
           });
         });
       }
       const crawlSelect = card.querySelector('[data-role="crawl-model"]');
-      const antibotSelect = card.querySelector('[data-role="antibot-model"]');
+      const antibotSelect = card.querySelector(
+        '[data-role="antibot-model"]'
+      );
       const workersSelect = card.querySelector('[data-role="workers"]');
-      const saveModelsBtn = card.querySelector('[data-role="save-models"]');
+      const saveModelsBtn = card.querySelector(
+        '[data-role="save-models"]'
+      );
       if (saveModelsBtn) {
         saveModelsBtn.addEventListener("click", () => {
           const crawl = (crawlSelect?.value || "").trim() || "qwen2.5:14b";
@@ -572,14 +593,19 @@
       }
       const envBtn = card.querySelector('[data-role="env"]');
       if (envBtn) {
-        envBtn.addEventListener("click", () => openEnvModal(item));
+        envBtn.addEventListener("click", () => {
+          void openEnvModal(item);
+        });
       }
-      const saveEnvInline = card.querySelector('[data-role="save-env-inline"]');
+      const saveEnvInline = card.querySelector(
+        '[data-role="save-env-inline"]'
+      );
       if (saveEnvInline) {
         saveEnvInline.addEventListener("click", () => {
           const values = {};
           card.querySelectorAll("[data-env-key]").forEach((input) => {
-            values[input.getAttribute("data-env-key")] = input.value || "";
+            const key = input.getAttribute("data-env-key");
+            if (key) values[key] = input.value || "";
           });
           withBusy(async () => {
             log2(`${item.name}: zapisuj\u0119 env projektu`);
@@ -587,7 +613,9 @@
           });
         });
       }
-      const editOptsBtn = card.querySelector('[data-role="edit-options"]');
+      const editOptsBtn = card.querySelector(
+        '[data-role="edit-options"]'
+      );
       if (editOptsBtn) {
         editOptsBtn.addEventListener("click", () => openEditOptionsPrompt(item));
       }
@@ -604,85 +632,109 @@
           });
         });
       }
-      card.querySelector('[data-role="check-ip"]').addEventListener("click", async () => {
-        ipLine.textContent = "IP: sprawdzam\u2026";
-        ipLine.classList.remove("ok", "warn");
-        try {
-          const info = await api().checkProjectIp(item.id);
-          projectIpCache.set(item.id, info);
-          ipLine.textContent = formatProjectIpLine(info);
-          ipLine.classList.toggle("ok", !!info.ip && !info.error);
-          ipLine.classList.toggle("warn", !info.ip || !!info.error);
-          if (info.ip) {
-            log2(
-              `${item.name}: ${info.ip}${info.country ? ` ${info.country}` : ""}${info.org ? ` \xB7 ${info.org}` : ""}`
-            );
-          } else if (info.error) {
-            setError2(info.error);
+      requireEl(card, '[data-role="check-ip"]').addEventListener(
+        "click",
+        async () => {
+          ipLine.textContent = "IP: sprawdzam\u2026";
+          ipLine.classList.remove("ok", "warn");
+          try {
+            const info = await api().checkProjectIp(item.id);
+            projectIpCache.set(item.id, info);
+            ipLine.textContent = formatProjectIpLine(info);
+            ipLine.classList.toggle("ok", !!info.ip && !info.error);
+            ipLine.classList.toggle("warn", !info.ip || !!info.error);
+            if (info.ip) {
+              log2(
+                `${item.name}: ${info.ip}${info.country ? ` ${info.country}` : ""}${info.org ? ` \xB7 ${info.org}` : ""}`
+              );
+            } else if (info.error) {
+              setError2(info.error);
+            }
+          } catch (err) {
+            ipLine.textContent = "IP: b\u0142\u0105d";
+            ipLine.classList.add("warn");
+            setError2(errMsg(err));
           }
-        } catch (err) {
-          ipLine.textContent = "IP: b\u0142\u0105d";
-          ipLine.classList.add("warn");
-          setError2(err.message || String(err));
         }
-      });
-      card.querySelector('[data-role="toggle"]').addEventListener("click", () => {
-        withBusy(async () => {
-          if (running) {
-            log2(`Wy\u0142\u0105czam ${item.name}`);
-            const snapOut2 = await api().stopCrawler(item.id);
-            if (selectedProjectId === item.id) await attachProjectLogs(item.id);
-            return snapOut2;
+      );
+      requireEl(card, '[data-role="toggle"]').addEventListener(
+        "click",
+        () => {
+          withBusy(async () => {
+            if (running) {
+              log2(`Wy\u0142\u0105czam ${item.name}`);
+              const snapOut2 = await api().stopCrawler(item.id);
+              if (selectedProjectId === item.id) await attachProjectLogs(item.id);
+              return snapOut2;
+            }
+            const optionValues = collectStartOptionValues(card);
+            log2(isCli ? `Uruchamiam CLI ${item.name}` : `W\u0142\u0105czam ${item.name}`);
+            const snapOut = await api().startCrawler(item.id, optionValues);
+            selectedProjectId = item.id;
+            await attachProjectLogs(item.id);
+            return snapOut;
+          });
+        }
+      );
+      requireEl(card, '[data-role="logs"]').addEventListener(
+        "click",
+        async () => {
+          if (selectedProjectId === item.id) {
+            await detachProjectLogs();
+            if (snapshot) renderProjects(snapshot);
+            return;
           }
-          const optionValues = collectStartOptionValues(card);
-          log2(isCli ? `Uruchamiam CLI ${item.name}` : `W\u0142\u0105czam ${item.name}`);
-          const snapOut = await api().startCrawler(item.id, optionValues);
           selectedProjectId = item.id;
+          if (snapshot) renderProjects(snapshot);
           await attachProjectLogs(item.id);
-          return snapOut;
-        });
-      });
-      card.querySelector('[data-role="logs"]').addEventListener("click", async () => {
-        if (selectedProjectId === item.id) {
-          await detachProjectLogs();
-          renderProjects(snapshot);
-          return;
         }
-        selectedProjectId = item.id;
-        renderProjects(snapshot);
-        await attachProjectLogs(item.id);
-      });
-      card.querySelector('[data-role="refresh-logs"]').addEventListener("click", async () => {
-        await attachProjectLogs(item.id);
-      });
-      card.querySelector('[data-role="cursor"]').addEventListener("click", async () => {
-        try {
-          await api().openInCursor(item.id);
-        } catch (err) {
-          setError2(err.message || String(err));
+      );
+      requireEl(card, '[data-role="refresh-logs"]').addEventListener(
+        "click",
+        async () => {
+          await attachProjectLogs(item.id);
         }
-      });
-      card.querySelector('[data-role="export"]').addEventListener("click", () => {
-        withBusy(async () => {
-          log2(`Eksportuj\u0119 ${item.name}`);
-          const out = await api().exportProject(item.id);
-          if (out?.path) log2(`Zapisano: ${out.path}`);
-          return null;
-        });
-      });
-      card.querySelector('[data-role="duplicate"]').addEventListener("click", () => {
-        openDupModal(item);
-      });
-      card.querySelector('[data-role="remove"]').addEventListener("click", () => {
-        if (!confirm(`Usun\u0105\u0107 \u201E${item.name}\u201D z listy?
+      );
+      requireEl(card, '[data-role="cursor"]').addEventListener(
+        "click",
+        async () => {
+          try {
+            await api().openInCursor(item.id);
+          } catch (err) {
+            setError2(errMsg(err));
+          }
+        }
+      );
+      requireEl(card, '[data-role="export"]').addEventListener(
+        "click",
+        () => {
+          withBusy(async () => {
+            log2(`Eksportuj\u0119 ${item.name}`);
+            const out = await api().exportProject(item.id);
+            if (out?.path) log2(`Zapisano: ${out.path}`);
+            return null;
+          });
+        }
+      );
+      requireEl(card, '[data-role="duplicate"]').addEventListener(
+        "click",
+        () => {
+          openDupModal(item);
+        }
+      );
+      requireEl(card, '[data-role="remove"]').addEventListener(
+        "click",
+        () => {
+          if (!confirm(`Usun\u0105\u0107 \u201E${item.name}\u201D z listy?
 Folder na dysku zostaje.`)) return;
-        withBusy(async () => {
-          if (selectedProjectId === item.id) await detachProjectLogs();
-          projectIpCache.delete(item.id);
-          log2(`Usuwam ${item.name}`);
-          return api().removeCrawler(item.id);
-        });
-      });
+          withBusy(async () => {
+            if (selectedProjectId === item.id) await detachProjectLogs();
+            projectIpCache.delete(item.id);
+            log2(`Usuwam ${item.name}`);
+            return api().removeCrawler(item.id);
+          });
+        }
+      );
       el.projectList.appendChild(card);
     }
   }
@@ -724,15 +776,17 @@ Folder na dysku zostaje.`)) return;
   }
   function collectStartOptionValues(card) {
     const values = {};
-    card.querySelectorAll("[data-opt-id]").forEach((node) => {
-      const id = node.getAttribute("data-opt-id");
-      if (!id) return;
-      if (node.type === "checkbox") {
-        values[id] = node.checked ? "1" : "0";
-      } else {
-        values[id] = node.value || "";
+    card.querySelectorAll("[data-opt-id]").forEach(
+      (node) => {
+        const id = node.getAttribute("data-opt-id");
+        if (!id) return;
+        if (node instanceof HTMLInputElement && node.type === "checkbox") {
+          values[id] = node.checked ? "1" : "0";
+        } else {
+          values[id] = node.value || "";
+        }
       }
-    });
+    );
     return values;
   }
   function renderNewOptionRow(opt = {}) {
@@ -756,13 +810,21 @@ Folder na dysku zostaje.`)) return;
     <input data-f="default" type="text" placeholder="domy\u015Blna" value="${escapeHtml(opt.default || "")}" />
     <button type="button" class="ghost tiny" data-f="remove">\xD7</button>
   `;
-    row.querySelector('[data-f="remove"]').addEventListener("click", () => row.remove());
+    requireEl(row, '[data-f="remove"]').addEventListener(
+      "click",
+      () => row.remove()
+    );
     return row;
   }
   function collectNewOptionsFromModal() {
     if (!el.newOptionsList) return [];
     return [...el.newOptionsList.querySelectorAll(".option-row")].map((row) => {
-      const get = (f) => (row.querySelector(`[data-f="${f}"]`)?.value || "").trim();
+      const get = (f) => {
+        const node = row.querySelector(
+          `[data-f="${f}"]`
+        );
+        return (node?.value || "").trim();
+      };
       return {
         id: get("id"),
         label: get("label"),
@@ -776,7 +838,9 @@ Folder na dysku zostaje.`)) return;
     }).filter((o) => o.id || o.label);
   }
   function openEditOptionsPrompt(item) {
-    const current = (item.options || []).map((o) => `${o.id}|${o.label}|${o.type}|${o.apply || "env"}|${o.env || ""}|${o.arg || ""}|${o.default || ""}`).join("\n");
+    const current = (item.options || []).map(
+      (o) => `${o.id}|${o.label}|${o.type}|${o.apply || "env"}|${o.env || ""}|${o.arg || ""}|${o.default || ""}`
+    ).join("\n");
     const text = prompt(
       "Opcje startu (jedna na lini\u0119):\nid|etykieta|text|env|ENV_NAME|--flag|domy\u015Blna\n\nTypy: text, number, checkbox, select\nApply: env, arg, both",
       current || "limit|Limit|number|env|EXITLY_OPT_LIMIT|--limit|5"
@@ -784,7 +848,15 @@ Folder na dysku zostaje.`)) return;
     if (text == null) return;
     const options = text.split(/\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
       const [id, label, type, apply, env, arg, def] = line.split("|").map((s) => (s || "").trim());
-      return { id, label, type: type || "text", apply: apply || "env", env, arg, default: def };
+      return {
+        id: id || "",
+        label: label || "",
+        type: type || "text",
+        apply: apply || "env",
+        env,
+        arg,
+        default: def
+      };
     });
     withBusy(async () => {
       log2(`${item.name}: aktualizacja opcji (${options.length})`);
@@ -831,7 +903,7 @@ Folder na dysku zostaje.`)) return;
       }
     } catch (err) {
       el.envFields.innerHTML = "";
-      setError2(err.message || String(err));
+      setError2(errMsg(err));
       closeEnvModal();
     }
   }
@@ -868,7 +940,7 @@ Folder na dysku zostaje.`)) return;
       if (!snap.ok && snap.error) setError2(snap.error);
       renderSnapshot(snap);
     } catch (err) {
-      setError2(err.message || String(err));
+      setError2(errMsg(err));
     }
   }
   function openNewModal() {
@@ -886,7 +958,7 @@ Folder na dysku zostaje.`)) return;
       defaults.antibotModel || "captchamind:7b",
       models
     );
-    refreshOllamaModelsForSelect(el.newCrawlModel);
+    void refreshOllamaModelsForSelect(el.newCrawlModel);
     if (el.newOptionsList) {
       el.newOptionsList.innerHTML = "";
     }
@@ -942,8 +1014,8 @@ Folder na dysku zostaje.`)) return;
         log2(`Ollama b\u0142\u0105d: ${result.error || "?"}`);
       }
     } catch (err) {
-      setOllamaStatus(`B\u0142\u0105d: ${err.message || err}`, "err");
-      setError2(err.message || String(err));
+      setOllamaStatus(`B\u0142\u0105d: ${errMsg(err)}`, "err");
+      setError2(errMsg(err));
     }
   });
   $("#btn-serper-save").addEventListener("click", () => {
@@ -971,8 +1043,8 @@ Folder na dysku zostaje.`)) return;
       const snap = await api().getSnapshot();
       if (snap) renderSnapshot(snap);
     } catch (err) {
-      setHostWgStatus(err.message || String(err), "err");
-      setError2(err.message || String(err));
+      setHostWgStatus(errMsg(err), "err");
+      setError2(errMsg(err));
     }
   });
   $("#btn-serper-test").addEventListener("click", async () => {
@@ -989,8 +1061,8 @@ Folder na dysku zostaje.`)) return;
         log2(`Serper b\u0142\u0105d: ${result.error || "?"}`);
       }
     } catch (err) {
-      setSerperStatus(`B\u0142\u0105d: ${err.message || err}`, "err");
-      setError2(err.message || String(err));
+      setSerperStatus(`B\u0142\u0105d: ${errMsg(err)}`, "err");
+      setError2(errMsg(err));
     }
   });
   $("#btn-new-project").addEventListener("click", openNewModal);
@@ -1056,7 +1128,8 @@ Folder na dysku zostaje.`)) return;
     if (!envEditProjectId) return;
     const values = {};
     el.envFields.querySelectorAll("[data-env-key]").forEach((input) => {
-      values[input.getAttribute("data-env-key")] = input.value || "";
+      const key = input.getAttribute("data-env-key");
+      if (key) values[key] = input.value || "";
     });
     withBusy(async () => {
       log2("Zapisuj\u0119 .env projektu");
@@ -1157,7 +1230,8 @@ Folder na dysku zostaje.`)) return;
   function showUpdateBanner(visible) {
     el.updateBanner.classList.toggle("hidden", !visible);
   }
-  function setUpdateButtons({ download = false, install = false } = {}) {
+  function setUpdateButtons(opts = {}) {
+    const { download = false, install = false } = opts;
     el.btnUpdateDownload.classList.toggle("hidden", !download);
     el.btnUpdateInstall.classList.toggle("hidden", !install);
   }
@@ -1223,11 +1297,11 @@ Folder na dysku zostaje.`)) return;
     try {
       await api().downloadUpdate();
     } catch (err) {
-      setError2(err.message || String(err));
+      setError2(errMsg(err));
     }
   });
   el.btnUpdateInstall.addEventListener("click", () => {
-    api().installUpdate();
+    void api().installUpdate();
   });
   api().onUpdateStatus(handleUpdateStatus);
   (async () => {
@@ -1237,9 +1311,9 @@ Folder na dysku zostaje.`)) return;
       showUpdateBanner(false);
     } catch {
     }
-    refresh();
+    void refresh();
   })();
   setInterval(() => {
-    if (!isBusy()) refresh();
+    if (!isBusy()) void refresh();
   }, 15e3);
 })();

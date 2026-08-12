@@ -25,11 +25,13 @@ git push origin v1.0.3
 
 GitHub Actions builds TypeScript (`pnpm build`) then:
 
-| OS | Artifacts |
-|----|-----------|
-| macOS | `.dmg` + `.zip` (zip required for auto-update) |
-| Windows | NSIS `.exe` installer |
-| Linux | `.AppImage` + `.deb` |
+| OS | Artifact (one each) |
+|----|---------------------|
+| macOS (Apple Silicon / arm64) | `.zip` (also used by auto-update) |
+| Windows | NSIS `.exe` |
+| Linux | `.AppImage` |
+
+macOS is **arm64 only** (M1–M5). Intel Macs are not supported.
 
 Assets attach to the GitHub Release. The in-app updater reads `latest.yml` / `latest-mac.yml` / `latest-linux.yml`.
 

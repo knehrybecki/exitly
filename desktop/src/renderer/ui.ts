@@ -3,6 +3,22 @@ export const $ = <T extends Element = HTMLElement>(sel: string): T =>
 export const $$ = <T extends Element = HTMLElement>(sel: string): T[] =>
   [...document.querySelectorAll(sel)] as T[];
 
+export function requireEl<T extends Element = HTMLElement>(
+  root: ParentNode,
+  sel: string,
+): T {
+  const node = root.querySelector(sel);
+  if (!node) throw new Error(`Missing element: ${sel}`);
+  return node as T;
+}
+
+export function qs<T extends Element = HTMLElement>(
+  root: ParentNode,
+  sel: string,
+): T | null {
+  return root.querySelector(sel) as T | null;
+}
+
 export function escapeHtml(value: unknown): string {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
