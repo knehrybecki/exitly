@@ -21,6 +21,8 @@ import {
   shellQuote,
   powershellQuote,
   normalizeCliArgs,
+  augmentedPath,
+  resolveHostExecutable,
 } from "./util/command";
 import {
   slugOptionId,
@@ -2275,36 +2277,11 @@ function applyCliShellDefaults(spec, crawler) {
   return { ...spec, args };
 }
 
-/** Find bare commands (opencode) — Electron PATH often misses ~/.local/bin. */
+/** Find bare commands (opencode / docker) — Electron PATH often misses Homebrew/OrbStack. */
 function resolveCliExecutable(command) {
   const name = String(command || '').trim();
   if (!name || name.includes('/') || name.includes('\\')) return '';
-  const home = process.env.HOME || process.env.USERPROFILE || '';
-  const dirs = [
-    path.join(home, '.local', 'bin'),
-    path.join(home, '.bun', 'bin'),
-    path.join(home, '.nvm', 'current', 'bin'),
-    '/opt/homebrew/bin',
-    '/usr/local/bin',
-    '/usr/bin',
-    ...(String(process.env.PATH || '')
-      .split(path.delimiter)
-      .filter(Boolean)),
-  ];
-  const seen = new Set();
-  for (const dir of dirs) {
-    if (!dir || seen.has(dir)) continue;
-    seen.add(dir);
-    const candidate = path.join(dir, name);
-    try {
-      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-        return candidate;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  return '';
+  return resolveHostExecutable(name);
 }
 
 function cliShellBasename(command) {
@@ -4259,9 +4236,19 @@ function writeActive(code, name) {
 
 function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, {
+    const bare = String(cmd || "").trim();
+    const resolved =
+      bare.includes("/") || bare.includes("\\")
+        ? bare
+        : resolveHostExecutable(bare) || bare;
+    const baseEnv = { ...process.env, ...(opts.env || {}) };
+    const env = {
+      ...baseEnv,
+      PATH: [baseEnv.PATH, augmentedPath()].filter(Boolean).join(path.delimiter),
+    };
+    const child = spawn(resolved, args, {
       cwd: opts.cwd || getHubRoot(),
-      env: { ...process.env, ...(opts.env || {}) },
+      env,
       shell: false,
       windowsHide: true,
     });
@@ -4285,7 +4272,18 @@ function run(cmd, args, opts = {}) {
           .forEach((line) => opts.onLog(line));
       }
     });
-    child.on("error", reject);
+    child.on("error", (spawnErr) => {
+      if (spawnErr && spawnErr.code === "ENOENT") {
+        reject(
+          new Error(
+            `Nie znaleziono „${bare}” (Electron nie widzi PATH). ` +
+              `Zainstaluj Docker/OrbStack albo uruchom Exitly z terminala.`,
+          ),
+        );
+        return;
+      }
+      reject(spawnErr);
+    });
     child.on("close", (code) => {
       if (code === 0) resolve(out);
       else reject(new Error((err || out || `exit ${code}`).trim()));
@@ -4888,9 +4886,10 @@ function followProjectLogs(id, { onLine, tail = 100 } = {}) {
     return true;
   }
 
-  const child = spawn('docker', ['logs', '-f', '--tail', String(tail), crawler.containerName], {
+  const dockerBin = resolveHostExecutable('docker') || 'docker';
+  const child = spawn(dockerBin, ['logs', '-f', '--tail', String(tail), crawler.containerName], {
     cwd: crawler.path,
-    env: process.env,
+    env: { ...process.env, PATH: augmentedPath() },
     shell: false,
     windowsHide: true,
   });

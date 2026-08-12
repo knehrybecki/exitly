@@ -16,6 +16,12 @@ function getAutoUpdater() {
     ({ autoUpdater } = require("electron-updater") as typeof import("electron-updater"));
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
+    // GitHub asset CDN + Electron net: avoid HTTP/2 stream / range quirks
+    autoUpdater.disableDifferentialDownload = true;
+    autoUpdater.requestHeaders = {
+      "Cache-Control":
+        "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+    };
   }
   return autoUpdater;
 }
@@ -24,6 +30,17 @@ function send(win: BW | null, channel: string, payload: UpdateStatusPayload) {
   if (win && !win.isDestroyed()) {
     win.webContents.send(channel, payload);
   }
+}
+
+function friendlyUpdateError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err || "unknown");
+  if (/ERR_HTTP2|HTTP2|REFUSED_STREAM|PROTOCOL_ERROR/i.test(raw)) {
+    return "GitHub odmówił połączenia HTTP/2. Spróbuj ponownie za chwilę albo pobierz release ręcznie.";
+  }
+  if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|net::ERR_/i.test(raw)) {
+    return `Brak połączenia z serwerem aktualizacji (${raw}).`;
+  }
+  return raw;
 }
 
 export function setupAutoUpdater(getMainWindow: () => BW | null): void {
@@ -70,7 +87,7 @@ export function setupAutoUpdater(getMainWindow: () => BW | null): void {
   updater.on("error", (err) => {
     send(getMainWindow(), Ipc.push.updateStatus, {
       state: "error",
-      message: err == null ? "unknown" : err.message || String(err),
+      message: friendlyUpdateError(err),
     });
   });
 }
@@ -85,13 +102,14 @@ export async function checkForUpdates({
     const result = await getAutoUpdater().checkForUpdates();
     return { ok: true as const, updateInfo: result?.updateInfo || null };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = friendlyUpdateError(err);
     if (!silent) {
       const win = BrowserWindow.getFocusedWindow();
       await dialog.showMessageBox(win || undefined!, {
         type: "error",
-        title: "Update check failed",
-        message,
+        title: "Aktualizacja",
+        message: "Nie udało się sprawdzić aktualizacji",
+        detail: message,
       });
     }
     return { ok: false as const, reason: message };

@@ -5,6 +5,9 @@ import * as updater from "../updater";
 import { applyAppIcon, createMainWindow } from "./window";
 import { hub, registerIpcHandlers } from "./ipc";
 
+// electron-updater + GitHub/Fastly: HTTP/2 often throws ERR_HTTP2_SERVER_REFUSED_STREAM
+app.commandLine.appendSwitch("disable-http2");
+
 let mainWindow: BW | null = null;
 
 function sendLog(line: string): void {
