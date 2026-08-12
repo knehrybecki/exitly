@@ -14,7 +14,16 @@ Optional Apple notarization secrets (macOS Gatekeeper):
 - `CSC_LINK` / `CSC_KEY_PASSWORD` — Developer ID certificate
 - `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID`
 
-Without them, macOS builds still upload; users may need right-click → Open the first time.
+Without them, macOS builds still upload, but Gatekeeper may say the app is **damaged** after download. Clear quarantine once:
+
+```bash
+cd ~/Downloads
+unzip -o Exitly-*-mac-arm64.zip
+xattr -cr Exitly.app
+open Exitly.app
+```
+
+Or: right-click `Exitly.app` → **Open** → confirm.
 
 ## Cut a release
 

@@ -31,7 +31,7 @@ Download from [GitHub Releases](https://github.com/knehrybecki/exitly/releases):
 | Windows | `Exitly-*-win-x64.exe` |
 | Linux | `Exitly-*-linux-x86_64.AppImage` or `.deb` |
 
-The packaged app auto-updates from the in-app banner. On unsigned macOS builds: right-click → Open the first time.
+The packaged app auto-updates from the in-app banner. Unsigned macOS builds may show as “damaged” after download — run `xattr -cr Exitly.app` (or right-click → Open).
 
 ### Run from source
 

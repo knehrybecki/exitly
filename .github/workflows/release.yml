@@ -10,7 +10,28 @@ permissions:
   contents: write
 
 jobs:
+  # Create the GitHub Release once so parallel platform jobs only upload assets
+  # (avoids 422 tag_name already_exists from electron-builder race).
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure GitHub Release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists"
+          else
+            gh release create "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$tag" \
+              --notes "Exitly $tag" \
+              --verify-tag
+          fi
+
   release:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
