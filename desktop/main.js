@@ -48,7 +48,7 @@ function createWindow() {
     backgroundColor: "#030806",
     show: false,
     ...(icon ? { icon } : {}),
-    webPreferences: {nie
+    webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
