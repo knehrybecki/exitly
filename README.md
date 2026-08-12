@@ -18,10 +18,22 @@ Built on [Gluetun](https://github.com/qdm12/gluetun). Your apps just attach with
 
 ## Quick start (Desktop app — recommended)
 
-No terminal required after the first key paste:
+No terminal required after the first key paste.
+
+### Install from a release
+
+Download the installer for your OS from GitHub **Releases**:
+
+- macOS → `.dmg`
+- Windows → `.exe` (NSIS)
+- Linux → `.AppImage` or `.deb`
+
+The app checks for updates automatically and can install them from the update banner.
+
+### Run from source
 
 ```bash
-git clone https://github.com/YOUR_USER/vpn-hub.git
+git clone https://github.com/YOUR_GITHUB_USER/vpn-hub.git
 cd vpn-hub/desktop
 npm install
 npm start
@@ -32,12 +44,12 @@ npm start
 2. Choose a country → **Connect**
 3. Open the **Connect any app** panel and copy the snippet for Docker or HTTP proxy
 
-Details: [`desktop/README.md`](desktop/README.md).
+Build installers / publish updates: [`RELEASE.md`](RELEASE.md) · [`desktop/README.md`](desktop/README.md).
 
 ## Quick start (CLI)
 
 ```bash
-git clone https://github.com/YOUR_USER/vpn-hub.git
+git clone https://github.com/YOUR_GITHUB_USER/vpn-hub.git
 cd vpn-hub
 ./bin/vpn setup
 ```

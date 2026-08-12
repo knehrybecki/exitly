@@ -1,10 +1,16 @@
 # vpn-hub Desktop
 
-Electron UI for the ProtonVPN hub — connect, switch country, disconnect, and copy “attach any app” snippets without using the terminal.
+Cross-platform Electron app for the ProtonVPN hub.
 
-## Run
+| Platform | Installer |
+|----------|-----------|
+| macOS | `.dmg` |
+| Windows | NSIS `.exe` |
+| Linux | `.AppImage` / `.deb` |
 
-From the repo root (Docker must be available):
+In-app updates use GitHub Releases (`electron-updater`).
+
+## Develop
 
 ```bash
 cd desktop
@@ -12,19 +18,23 @@ npm install
 npm start
 ```
 
-First launch:
+Requires Docker on the host. First run: paste WireGuard PrivateKey.
 
-1. Paste your Proton WireGuard **PrivateKey** (Account → VPN → WireGuard)
-2. Pick a country → **Connect**
-3. Use the **Connect any app** panel to wire your projects
+## Build installers locally
 
-## What the app controls
+```bash
+npm run dist:mac
+npm run dist:win
+npm run dist:linux
+# or all for current OS tooling:
+npm run dist
+```
 
-| Action | Effect |
-|--------|--------|
-| Connect / Switch | `vpn use <country>` → container `proton-vpn` |
-| Disconnect | `vpn down` |
-| Parallel RO/HU/BG | `vpn up` / `vpn down` on `vpn-ro`… |
-| Check IP | `ipinfo` via the tunnel |
+See [`../RELEASE.md`](../RELEASE.md) for tagging, CI, and auto-update.
 
-Keys stay in the hub `.env` on disk. Nothing is sent to a third-party backend.
+## Features
+
+- Connect / switch country / disconnect (no terminal)
+- Parallel RO/HU/BG exits
+- Copy Docker `network_mode` + HTTP proxy snippets
+- Auto-update banner (packaged builds)

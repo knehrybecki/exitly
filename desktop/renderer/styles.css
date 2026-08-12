@@ -61,6 +61,61 @@ body {
   padding: 28px 24px 40px;
 }
 
+.update-banner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px 16px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(198, 242, 124, 0.28);
+  background: rgba(198, 242, 124, 0.08);
+}
+
+.update-banner.hidden {
+  display: none !important;
+}
+
+.update-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.update-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.update-progress {
+  grid-column: 1 / -1;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.update-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.primary.tiny,
+.ghost.tiny {
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+.version {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
 .top {
   display: flex;
   align-items: flex-end;

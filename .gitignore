@@ -5,10 +5,10 @@ secrets/*
 !secrets/.gitkeep
 *.bak
 
-# Desktop (Electron)
 desktop/node_modules/
 desktop/dist/
 desktop/out/
+*.blockmap
 
 # OS / editor
 .DS_Store

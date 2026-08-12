@@ -19,6 +19,15 @@ const el = {
   btnConnect: $("#btn-connect"),
   btnDisconnect: $("#btn-disconnect"),
   privateKey: $("#private-key"),
+  updateBanner: $("#update-banner"),
+  updateTitle: $("#update-title"),
+  updateDetail: $("#update-detail"),
+  updateProgress: $("#update-progress"),
+  updateProgressBar: $("#update-progress-bar"),
+  btnUpdateCheck: $("#btn-update-check"),
+  btnUpdateDownload: $("#btn-update-download"),
+  btnUpdateInstall: $("#btn-update-install"),
+  appVersion: $("#app-version"),
 };
 
 let busy = false;
@@ -236,7 +245,104 @@ window.vpnHub.onLog((line) => {
   if (line) log(line);
 });
 
-refresh();
+function showUpdateBanner(visible) {
+  el.updateBanner.classList.toggle("hidden", !visible);
+}
+
+function setUpdateButtons({ download = false, install = false } = {}) {
+  el.btnUpdateDownload.classList.toggle("hidden", !download);
+  el.btnUpdateInstall.classList.toggle("hidden", !install);
+}
+
+function handleUpdateStatus(payload) {
+  if (!payload) return;
+  showUpdateBanner(true);
+  el.updateProgress.classList.add("hidden");
+  setUpdateButtons({});
+
+  switch (payload.state) {
+    case "checking":
+      el.updateTitle.textContent = "Checking for updates…";
+      el.updateDetail.textContent = "";
+      break;
+    case "available":
+      el.updateTitle.textContent = `Update ${payload.version} available`;
+      el.updateDetail.textContent = "Download and install without leaving the app.";
+      setUpdateButtons({ download: true });
+      log(`Update available: ${payload.version}`);
+      break;
+    case "not-available":
+      el.updateTitle.textContent = "You're up to date";
+      el.updateDetail.textContent = payload.version ? `Current ${payload.version}` : "";
+      break;
+    case "downloading": {
+      const pct = Math.max(0, Math.min(100, payload.percent || 0));
+      el.updateTitle.textContent = "Downloading update…";
+      el.updateDetail.textContent = `${pct.toFixed(0)}%`;
+      el.updateProgress.classList.remove("hidden");
+      el.updateProgressBar.style.width = `${pct}%`;
+      break;
+    }
+    case "downloaded":
+      el.updateTitle.textContent = `Update ${payload.version} ready`;
+      el.updateDetail.textContent = "Restart to install.";
+      setUpdateButtons({ install: true });
+      log(`Update downloaded: ${payload.version}`);
+      break;
+    case "error":
+      el.updateTitle.textContent = "Update error";
+      el.updateDetail.textContent = payload.message || "Unknown error";
+      log(`Update error: ${payload.message || "?"}`);
+      break;
+    default:
+      break;
+  }
+}
+
+el.btnUpdateCheck.addEventListener("click", async () => {
+  showUpdateBanner(true);
+  el.updateTitle.textContent = "Checking for updates…";
+  el.updateDetail.textContent = "";
+  const res = await window.vpnHub.checkForUpdates();
+  if (res && res.reason === "dev") {
+    el.updateTitle.textContent = "Updates need a packaged build";
+    el.updateDetail.textContent = "Run an installed release to use auto-update.";
+  }
+});
+
+el.btnUpdateDownload.addEventListener("click", async () => {
+  try {
+    await window.vpnHub.downloadUpdate();
+  } catch (err) {
+    setError(err.message || String(err));
+  }
+});
+
+el.btnUpdateInstall.addEventListener("click", () => {
+  window.vpnHub.installUpdate();
+});
+
+window.vpnHub.onUpdateStatus(handleUpdateStatus);
+
+(async () => {
+  try {
+    const info = await window.vpnHub.getAppInfo();
+    el.appVersion.textContent = `v${info.version} · ${info.platform}/${info.arch}${
+      info.packaged ? "" : " · dev"
+    }`;
+    showUpdateBanner(true);
+    el.updateTitle.textContent = info.packaged
+      ? "Auto-update enabled"
+      : "Dev mode";
+    el.updateDetail.textContent = info.packaged
+      ? "Checks GitHub Releases in the background."
+      : "Install a release build to enable in-app updates.";
+  } catch {
+    /* ignore */
+  }
+  refresh();
+})();
+
 setInterval(() => {
   if (!busy) refresh();
 }, 15000);

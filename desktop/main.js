@@ -8,17 +8,19 @@ const {
 } = require("electron");
 const path = require("path");
 const hub = require("./hub");
+const updater = require("./updater");
 
 let mainWindow = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 920,
-    height: 740,
+    height: 780,
     minWidth: 760,
-    minHeight: 620,
+    minHeight: 640,
     title: "vpn-hub",
     backgroundColor: "#0e1412",
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -28,6 +30,7 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+  mainWindow.once("ready-to-show", () => mainWindow.show());
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -41,18 +44,45 @@ function sendLog(line) {
   }
 }
 
-app.whenReady().then(() => {
-  createWindow();
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
   });
-});
+
+  app.whenReady().then(() => {
+    hub.ensureWorkspace();
+    createWindow();
+    updater.setupAutoUpdater(() => mainWindow);
+
+    // Auto-check a few seconds after launch (packaged only)
+    setTimeout(() => {
+      updater.checkForUpdates({ silent: true });
+    }, 4000);
+
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
 ipcMain.handle("hub:getRoot", () => hub.getHubRoot());
+
+ipcMain.handle("hub:getAppInfo", () => ({
+  version: app.getVersion(),
+  packaged: app.isPackaged,
+  platform: process.platform,
+  arch: process.arch,
+}));
 
 ipcMain.handle("hub:getSnapshot", async () => {
   try {
@@ -76,14 +106,14 @@ ipcMain.handle("hub:connect", async (_e, country) => {
   if (!code) throw new Error("Select a country");
   sendLog(`Connecting → ${code}…`);
   const out = await hub.runVpn(["use", code], sendLog);
-  sendLog(out.trim() || "Connected.");
+  sendLog(String(out || "Connected.").trim());
   return hub.getSnapshot(sendLog);
 });
 
 ipcMain.handle("hub:disconnect", async () => {
   sendLog("Disconnecting…");
   const out = await hub.runVpn(["down"], sendLog);
-  sendLog(out.trim() || "Disconnected.");
+  sendLog(String(out || "Disconnected.").trim());
   return hub.getSnapshot(sendLog);
 });
 
@@ -139,4 +169,10 @@ ipcMain.handle("hub:pickEnvHelp", async () => {
       "One key works for every country.",
     buttons: ["OK"],
   });
+});
+
+ipcMain.handle("update:check", async () => updater.checkForUpdates({ silent: false }));
+ipcMain.handle("update:download", async () => updater.downloadUpdate());
+ipcMain.handle("update:install", () => {
+  updater.quitAndInstall();
 });

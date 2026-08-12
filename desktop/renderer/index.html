@@ -19,10 +19,26 @@
   <body>
     <div class="bg" aria-hidden="true"></div>
     <div class="app">
+      <div id="update-banner" class="update-banner hidden">
+        <div class="update-text">
+          <strong id="update-title">Updates</strong>
+          <span id="update-detail" class="muted"></span>
+        </div>
+        <div class="update-actions">
+          <button type="button" class="ghost tiny" id="btn-update-check">Check</button>
+          <button type="button" class="primary tiny hidden" id="btn-update-download">Download</button>
+          <button type="button" class="primary tiny hidden" id="btn-update-install">Restart &amp; install</button>
+        </div>
+        <div class="update-progress hidden" id="update-progress">
+          <div class="update-progress-bar" id="update-progress-bar"></div>
+        </div>
+      </div>
+
       <header class="top">
         <div>
           <p class="eyebrow">Proton exit for every project</p>
           <h1>vpn-hub</h1>
+          <p class="version muted" id="app-version"></p>
         </div>
         <div class="top-actions">
           <button type="button" class="ghost" id="btn-reveal">Open folder</button>

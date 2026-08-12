@@ -1,17 +1,136 @@
 {
-  "name": "vpn-hub-desktop",
+  "name": "vpn-hub",
+  "productName": "vpn-hub",
   "version": "1.0.0",
-  "description": "Desktop UI for vpn-hub — switch ProtonVPN exits without the terminal",
+  "description": "Desktop UI for ProtonVPN exit hub — switch countries, connect any Docker app",
   "main": "main.js",
+  "author": "vpn-hub contributors",
+  "license": "MIT",
+  "homepage": "https://github.com/YOUR_GITHUB_USER/vpn-hub",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_GITHUB_USER/vpn-hub.git"
+  },
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dev": "electron ."
+    "dev": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:linux": "electron-builder --linux --publish never",
+    "release": "electron-builder --publish always",
+    "postinstall": "electron-builder install-app-deps"
   },
   "engines": {
     "node": ">=18"
   },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
   "devDependencies": {
-    "electron": "^35.1.2"
+    "electron": "^35.1.2",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "dev.vpnhub.app",
+    "productName": "vpn-hub",
+    "copyright": "Copyright © vpn-hub contributors",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "hub.js",
+      "updater.js",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../docker-compose.yml",
+        "to": "hub/docker-compose.yml"
+      },
+      {
+        "from": "../countries.conf",
+        "to": "hub/countries.conf"
+      },
+      {
+        "from": "../.env.example",
+        "to": "hub/.env.example"
+      },
+      {
+        "from": "../bin",
+        "to": "hub/bin"
+      },
+      {
+        "from": "../snippets",
+        "to": "hub/snippets"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "YOUR_GITHUB_USER",
+        "repo": "vpn-hub",
+        "releaseType": "release"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
+    },
+    "dmg": {
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "vpn-hub",
+      "deleteAppDataOnUninstall": false
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ],
+      "category": "Network",
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
+      "synopsis": "ProtonVPN exit hub for Docker projects",
+      "description": "Switch ProtonVPN exit countries and attach any Docker app to the shared tunnel."
+    },
+    "appImage": {
+      "license": "../LICENSE"
+    }
   }
 }
