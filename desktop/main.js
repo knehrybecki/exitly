@@ -18,7 +18,7 @@ function createWindow() {
     height: 780,
     minWidth: 760,
     minHeight: 640,
-    title: "vpn-hub",
+    title: "Exitquay",
     backgroundColor: "#0e1412",
     show: false,
     webPreferences: {

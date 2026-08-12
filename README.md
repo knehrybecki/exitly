@@ -1,70 +1,69 @@
-# vpn-hub
+# Exitquay
 
-Reusable **ProtonVPN exit hub** for Docker projects. One WireGuard key, easy country switching, optional parallel exits per country.
+<p align="center">
+  <img src="brand/logo-banner.png" alt="Exitquay" width="720" />
+</p>
 
-Built on [Gluetun](https://github.com/qdm12/gluetun). Your apps just attach with `network_mode: "container:proton-vpn"` — no Proton Desktop, no per-project VPN install.
+**ProtonVPN country exits for every Docker project.** One WireGuard key, easy switching, optional parallel exits — desktop app or CLI.
 
-## Why
+Built on [Gluetun](https://github.com/qdm12/gluetun). Apps attach with `network_mode: "container:proton-vpn"` — no Proton Desktop in each project.
 
-- Many side projects need a VPN exit in **different countries**
-- Installing Proton GUI / CLI in every VM or container does not scale
-- This repo is a small shared hub: switch country in one place, reuse from any compose stack
+## Why Exitquay?
+
+- Side projects need VPN exits in **different countries**
+- Installing Proton GUI/CLI per VM does not scale
+- One shared quay (hub): switch country once, reuse from any compose stack
 
 ## Requirements
 
 - Docker + Docker Compose v2
 - ProtonVPN account (WireGuard)
-- `/dev/net/tun` (Linux, OrbStack, Docker Desktop with VPN-capable VM)
+- `/dev/net/tun` (Linux, OrbStack, Docker Desktop)
 
-## Quick start (Desktop app — recommended)
-
-No terminal required after the first key paste.
+## Quick start (Desktop — recommended)
 
 ### Install from a release
 
-Download the installer for your OS from GitHub **Releases**:
+Download for your OS from GitHub **Releases**:
 
 - macOS → `.dmg`
 - Windows → `.exe` (NSIS)
 - Linux → `.AppImage` or `.deb`
 
-The app checks for updates automatically and can install them from the update banner.
+The app auto-updates from the in-app banner.
 
 ### Run from source
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USER/vpn-hub.git
-cd vpn-hub/desktop
+git clone https://github.com/YOUR_GITHUB_USER/exitquay.git
+cd exitquay/desktop
 npm install
 npm start
 ```
 
-1. Paste Proton WireGuard **PrivateKey** in the setup screen  
+1. Paste Proton WireGuard **PrivateKey**  
    ([Proton WireGuard configs](https://account.proton.me/u/0/vpn/WireGuard))
 2. Choose a country → **Connect**
-3. Open the **Connect any app** panel and copy the snippet for Docker or HTTP proxy
+3. Use **Connect any app** to copy Docker / proxy snippets
 
-Build installers / publish updates: [`RELEASE.md`](RELEASE.md) · [`desktop/README.md`](desktop/README.md).
+Build & publish: [`RELEASE.md`](RELEASE.md) · [`desktop/README.md`](desktop/README.md)
 
 ## Quick start (CLI)
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USER/vpn-hub.git
-cd vpn-hub
+git clone https://github.com/YOUR_GITHUB_USER/exitquay.git
+cd exitquay
 ./bin/vpn setup
 ```
 
 1. Open [Proton WireGuard configs](https://account.proton.me/u/0/vpn/WireGuard)
-2. Generate a config (any server) and copy **PrivateKey**
-3. Put it in `.env` as `WIREGUARD_PRIVATE_KEY=...`
-4. Connect:
+2. Copy **PrivateKey** into `.env` as `WIREGUARD_PRIVATE_KEY=...`
+3. Connect:
 
 ```bash
 ./bin/vpn use ro
 ./bin/vpn ip
 ```
-
-Optional PATH install:
 
 ```bash
 ln -sf "$(pwd)/bin/vpn" ~/.local/bin/vpn
@@ -74,8 +73,6 @@ ln -sf "$(pwd)/bin/vpn" ~/.local/bin/vpn
 
 ### Option A — Docker `network_mode` (best)
 
-With the hub connected (`proton-vpn` running), add this to **any** project compose file:
-
 ```yaml
 services:
   app:
@@ -83,13 +80,9 @@ services:
     network_mode: "container:proton-vpn"
 ```
 
-- All outbound traffic from that service uses the Proton exit
-- Switching country in the desktop app / `vpn use` does **not** require changing the project
-- See [`snippets/docker-compose.app.yml`](snippets/docker-compose.app.yml)
+Country switches in Exitquay do **not** require changing the project. See [`snippets/docker-compose.app.yml`](snippets/docker-compose.app.yml).
 
 ### Option B — HTTP proxy
-
-Hub exposes a proxy on `127.0.0.1:8888` while connected:
 
 ```bash
 export HTTP_PROXY=http://127.0.0.1:8888
@@ -97,9 +90,9 @@ export HTTPS_PROXY=http://127.0.0.1:8888
 export NO_PROXY=localhost,127.0.0.1
 ```
 
-From another container (own network): `http://host.docker.internal:8888`.
+From another container: `http://host.docker.internal:8888`.
 
-### Option C — Fixed country per project (parallel)
+### Option C — Parallel countries
 
 ```bash
 ./bin/vpn up ro hu
@@ -112,77 +105,34 @@ network_mode: "container:vpn-ro"
 network_mode: "container:vpn-hu"
 ```
 
-### Non-Docker / host processes
-
-Use Option B (proxy env vars), or run the process inside a container attached with Option A.
-
-Switch exit without touching the app:
-
-```bash
-vpn use hu    # Hungary
-vpn use bg    # Bulgaria
-vpn use de    # Germany
-vpn ip
-```
-
-## Parallel countries
-
-When several projects need different exits at once:
-
-```bash
-vpn up ro hu
-```
-
-Then pin each app:
-
-```yaml
-# project A
-network_mode: "container:vpn-ro"
-# project B
-network_mode: "container:vpn-hu"
-```
-
-Shipped parallel profiles: `ro`, `hu`, `bg`. Add more services in `docker-compose.yml` the same way.
-
 ## CLI
 
 | Command | Description |
 |--------|-------------|
-| `vpn setup` | Create `.env` from example |
+| `vpn setup` | Create `.env` |
 | `vpn use <code>` | Switch active exit (`proton-vpn`) |
 | `vpn up` / `vpn down` | Start/stop active exit |
-| `vpn up ro hu` | Start parallel exits |
-| `vpn status` | Container status |
-| `vpn ip` | Public IP / geo check |
-| `vpn countries` | List codes from `countries.conf` |
-| `vpn which` | Print `network_mode` snippet |
+| `vpn up ro hu` | Parallel exits |
+| `vpn status` / `vpn ip` | Status / public IP |
+| `vpn countries` | List codes |
 
-## Add a country
+## Brand
 
-1. Add a line to [`countries.conf`](countries.conf): `xx=Country Name`
-2. `vpn use xx` (single active exit)
+| Asset | Path |
+|-------|------|
+| App icon | [`brand/icon.png`](brand/icon.png) · [`desktop/build/icon.png`](desktop/build/icon.png) |
+| Banner | [`brand/logo-banner.png`](brand/logo-banner.png) |
 
-For a dedicated parallel container, copy the `vpn-ro` service block in `docker-compose.yml` and change the name + `SERVER_COUNTRIES`.
+## Security
 
-## HTTP proxy (optional)
-
-Gluetun exposes an HTTP proxy on host port `8888` (override with `HTTP_PROXY_PORT` in the environment / compose). Useful when an app must keep its own Docker network:
-
-```bash
-export HTTPS_PROXY=http://127.0.0.1:8888
-export HTTP_PROXY=http://127.0.0.1:8888
-```
-
-## Security notes
-
-- Never commit `.env` or WireGuard private keys
-- Prefer `network_mode: container:…` so the app cannot leak outside the tunnel
-- This hub does not replace OS sandboxing; mount only the volumes you need into app containers
+- Never commit `.env` or WireGuard keys
+- Prefer `network_mode: container:…` to avoid leaks
+- Exitquay is not a full OS sandbox — mount only what you need
 
 ## Credits
 
-- VPN client container: [qdm12/gluetun](https://github.com/qdm12/gluetun)
-- Provider: [Proton VPN](https://protonvpn.com/)
+- [qdm12/gluetun](https://github.com/qdm12/gluetun)
+- [Proton VPN](https://protonvpn.com/)
 
 ## License
 

@@ -1,4 +1,4 @@
-# Contributing
+# Contributing to Exitquay
 
 Issues and PRs welcome.
 
@@ -8,11 +8,12 @@ Issues and PRs welcome.
 - More entries in `countries.conf`
 - Small CLI UX improvements (`bin/vpn`)
 - Docs / snippets for Kubernetes, Podman, rootless
+- Brand / icon refinements in `brand/`
 
 ## Please avoid
 
 - Committing `.env`, keys, or live WireGuard configs
-- Bundling proprietary Proton Desktop / Electron apps
+- Bundling proprietary Proton Desktop apps
 - Provider-specific credentials in the repo
 
 ## Dev check
@@ -22,4 +23,6 @@ Issues and PRs welcome.
 ./bin/vpn countries
 # with a real .env:
 ./bin/vpn use ro && ./bin/vpn ip
+
+cd desktop && npm start
 ```

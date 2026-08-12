@@ -1,6 +1,6 @@
-# vpn-hub Desktop
+# Exitquay Desktop
 
-Cross-platform Electron app for the ProtonVPN hub.
+Cross-platform Electron app for Exitquay.
 
 | Platform | Installer |
 |----------|-----------|
@@ -26,15 +26,14 @@ Requires Docker on the host. First run: paste WireGuard PrivateKey.
 npm run dist:mac
 npm run dist:win
 npm run dist:linux
-# or all for current OS tooling:
 npm run dist
 ```
 
-See [`../RELEASE.md`](../RELEASE.md) for tagging, CI, and auto-update.
+See [`../RELEASE.md`](../RELEASE.md).
 
 ## Features
 
-- Connect / switch country / disconnect (no terminal)
+- Connect / switch country / disconnect
 - Parallel RO/HU/BG exits
 - Copy Docker `network_mode` + HTTP proxy snippets
 - Auto-update banner (packaged builds)

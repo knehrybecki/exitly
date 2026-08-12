@@ -1,10 +1,10 @@
 # Releases & auto-update
 
-vpn-hub Desktop ships installers for **macOS**, **Windows**, and **Linux**, and updates itself from **GitHub Releases** via `electron-updater`.
+Exitquay Desktop ships installers for **macOS**, **Windows**, and **Linux**, and updates itself from **GitHub Releases** via `electron-updater`.
 
 ## One-time publish setup
 
-1. Create the GitHub repo and push this project.
+1. Create the GitHub repo `exitquay` and push this project.
 2. Replace `YOUR_GITHUB_USER` in:
    - `desktop/package.json` → `homepage`, `repository.url`, `build.publish[0].owner`
 3. Commit and push.
@@ -31,7 +31,7 @@ GitHub Actions (`.github/workflows/release.yml`) builds:
 | Windows | NSIS `.exe` installer |
 | Linux | `.AppImage` + `.deb` |
 
-Assets are attached to the GitHub Release for that tag. The in-app updater reads `latest.yml` / `latest-mac.yml` / `latest-linux.yml` from that release.
+Assets attach to the GitHub Release. The in-app updater reads `latest.yml` / `latest-mac.yml` / `latest-linux.yml`.
 
 ## Local installers (no publish)
 
@@ -41,18 +41,18 @@ npm ci
 npm run dist:mac     # or dist:win / dist:linux / dist
 ```
 
-Outputs land in `desktop/dist/`.
+Outputs: `desktop/dist/`.
 
 ## How in-app update works
 
-1. Packaged app starts → checks GitHub Releases after a few seconds.
-2. Banner shows **Update available** → user clicks **Download**.
-3. When finished → **Restart & install**.
-4. Manual: banner **Check** anytime.
+1. Packaged app starts → checks GitHub Releases
+2. Banner: **Update available** → **Download**
+3. **Restart & install**
+4. Manual: banner **Check**
 
 Dev (`npm start`) cannot install updates — only packaged builds.
 
 ## Requirements on user machines
 
 - Docker Desktop (Mac/Windows) or Docker Engine (Linux) with Compose v2
-- Permission for `/dev/net/tun` (granted by Docker Desktop / rootless caveats on Linux)
+- `/dev/net/tun` available to Docker
