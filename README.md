@@ -37,8 +37,8 @@ The app auto-updates from the in-app banner.
 ```bash
 git clone https://github.com/YOUR_GITHUB_USER/exitly.git
 cd exitly/desktop
-npm install
-npm start
+pnpm install
+pnpm start
 ```
 
 1. Paste Proton WireGuard **PrivateKey**  
@@ -104,6 +104,22 @@ network_mode: "container:vpn-ro"
 # project B
 network_mode: "container:vpn-hu"
 ```
+
+### Option D — Ollama (or any published app port)
+
+Apps that use `network_mode: "container:proton-vpn"` must publish ports on the
+**hub** container, not on the app. In the desktop app: **Connect any app → Endpoints → Add Ollama** (port `11434`), then:
+
+```yaml
+services:
+  ollama:
+    image: ollama/ollama
+    network_mode: "container:proton-vpn"
+    volumes:
+      - ollama:/root/.ollama
+```
+
+See [`snippets/docker-compose.ollama.yml`](snippets/docker-compose.ollama.yml). Clients use `http://127.0.0.1:11434`.
 
 ## CLI
 

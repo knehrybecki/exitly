@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pl">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -11,23 +11,25 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Share+Tech+Mono&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="bg" aria-hidden="true"></div>
+    <div class="bg" aria-hidden="true">
+      <div class="bg-grid"></div>
+      <div class="bg-scan"></div>
+    </div>
     <div class="app">
       <div id="update-banner" class="update-banner hidden">
         <div class="update-text">
-          <strong id="update-title">Updates</strong>
+          <strong id="update-title">Aktualizacja</strong>
           <span id="update-detail" class="muted"></span>
         </div>
         <div class="update-actions">
-          <button type="button" class="ghost tiny" id="btn-update-check">Check</button>
-          <button type="button" class="primary tiny hidden" id="btn-update-download">Download</button>
-          <button type="button" class="primary tiny hidden" id="btn-update-install">Restart &amp; install</button>
+          <button type="button" class="ghost tiny hidden" id="btn-update-download">Pobierz</button>
+          <button type="button" class="primary tiny hidden" id="btn-update-install">Zainstaluj</button>
         </div>
         <div class="update-progress hidden" id="update-progress">
           <div class="update-progress-bar" id="update-progress-bar"></div>
@@ -36,143 +38,194 @@
 
       <header class="top">
         <div class="brand">
-          <img class="brand-mark" src="assets/icon.png" alt="" width="48" height="48" />
+          <img class="brand-mark" src="assets/icon.png" alt="" width="40" height="40" />
           <div>
-            <p class="eyebrow">Proton exits for every project</p>
+            <p class="eyebrow">crawl · exit node</p>
             <h1>Exitly</h1>
             <p class="version muted" id="app-version"></p>
           </div>
         </div>
         <div class="top-actions">
-          <button type="button" class="ghost" id="btn-reveal">Open folder</button>
-          <button type="button" class="ghost" id="btn-refresh">Refresh</button>
+          <button type="button" class="ghost" id="btn-settings">Ustawienia</button>
         </div>
       </header>
 
-      <section id="setup" class="panel setup hidden">
-        <h2>One-time setup</h2>
-        <p>
-          Paste your Proton <strong>WireGuard PrivateKey</strong>. One key works
-          for all countries. Nothing is uploaded — it is saved only in local
-          <code>.env</code>.
-        </p>
+      <div id="busy-bar" class="busy-bar hidden" aria-hidden="true"></div>
+      <p id="error" class="error hidden"></p>
+
+      <section id="setup" class="screen hidden">
+        <h2>Klucz Proton</h2>
+        <p class="lede">Wklej WireGuard PrivateKey — jeden klucz na wszystkie kraje.</p>
         <label class="field">
           <span>PrivateKey</span>
-          <input
-            id="private-key"
-            type="password"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="base64 WireGuard private key"
-          />
+          <input id="private-key" type="password" autocomplete="off" spellcheck="false" placeholder="wklej klucz…" />
         </label>
         <div class="row">
-          <button type="button" class="ghost" id="btn-key-help">How to get the key</button>
-          <button type="button" class="primary" id="btn-save-key">Save &amp; continue</button>
+          <button type="button" class="ghost" id="btn-key-help">Jak zdobyć?</button>
+          <button type="button" class="primary" id="btn-save-key">Zapisz</button>
         </div>
       </section>
 
-      <section id="main-ui" class="grid hidden">
-        <div class="panel hero-panel">
-          <div class="status-row">
-            <span class="dot" id="status-dot"></span>
-            <div>
-              <p class="status-label" id="status-label">Checking…</p>
-              <p class="status-sub" id="status-sub">—</p>
-            </div>
-          </div>
-
-          <label class="field">
-            <span>Exit country</span>
-            <select id="country"></select>
-          </label>
-
-          <div class="row actions">
-            <button type="button" class="primary" id="btn-connect">Connect</button>
-            <button type="button" class="danger" id="btn-disconnect" disabled>
-              Disconnect
-            </button>
-          </div>
-
-          <div class="ip-box" id="ip-box">
-            <div>
-              <span class="muted">Public IP</span>
-              <strong id="ip-value">—</strong>
-            </div>
-            <div>
-              <span class="muted">Geo</span>
-              <strong id="ip-geo">—</strong>
-            </div>
-            <button type="button" class="ghost tiny" id="btn-ip">Check IP</button>
+      <section id="main-ui" class="screen hidden">
+        <div class="section-bar">
+          <h2>Projekty</h2>
+          <div class="row">
+            <button type="button" class="ghost" id="btn-import-project">Importuj</button>
+            <button type="button" class="ghost" id="btn-open-project">Otwórz</button>
+            <button type="button" class="primary" id="btn-new-project">Nowy</button>
           </div>
         </div>
+        <div id="project-list" class="project-list"></div>
+      </section>
 
-        <div class="panel">
-          <h2>Connect any app</h2>
+      <section id="settings" class="screen hidden">
+        <div class="section-bar">
+          <h2>Ustawienia</h2>
+          <button type="button" class="ghost" id="btn-settings-back">← Projekty</button>
+        </div>
+        <div class="card">
+          <h3>Ollama</h3>
           <p class="lede">
-            Keep the hub running here. Point your Docker app at the shared
-            tunnel — no Proton code inside the project.
+            Adres lokalnej Ollamy (URL). Modele crawl4ai / antybot ustawiasz
+            per projekt na karcie projektu.
           </p>
-
-          <div class="tabs" role="tablist">
-            <button type="button" class="tab active" data-tab="docker">Docker</button>
-            <button type="button" class="tab" data-tab="proxy">HTTP proxy</button>
-            <button type="button" class="tab" data-tab="parallel">Parallel</button>
+          <label class="check">
+            <input id="ollama-enabled" type="checkbox" checked />
+            Włącz
+          </label>
+          <label class="field">
+            <span>URL</span>
+            <input id="ollama-url" type="url" placeholder="http://127.0.0.1:11434" />
+          </label>
+          <div class="row">
+            <button type="button" class="primary" id="btn-ollama-save">Zapisz</button>
+            <button type="button" class="ghost" id="btn-ollama-test">Test</button>
           </div>
-
-          <div class="tab-panel" id="tab-docker">
-            <p>Best option. All traffic from the container goes through Proton.</p>
-            <pre id="snippet-compose" class="code"></pre>
-            <button type="button" class="ghost" data-copy="snippet-compose">Copy compose</button>
-            <p class="hint">
-              Hub container name stays <code>proton-vpn</code>. Switch country in
-              this app; your project compose does not change.
-            </p>
+          <p id="ollama-status" class="meta ollama-status" aria-live="polite"></p>
+        </div>
+        <div class="card">
+          <h3>Serper</h3>
+          <p class="lede">
+            Globalny klucz Serper — każdy projekt dostaje <code>SERPER_API_KEY</code>
+            przy starcie (serper.dev).
+          </p>
+          <label class="check">
+            <input id="serper-enabled" type="checkbox" checked />
+            Włącz
+          </label>
+          <label class="field">
+            <span>API key</span>
+            <input id="serper-key" type="password" autocomplete="off" spellcheck="false" placeholder="klucz z serper.dev…" />
+          </label>
+          <div class="row">
+            <button type="button" class="primary" id="btn-serper-save">Zapisz</button>
+            <button type="button" class="ghost" id="btn-serper-test">Test</button>
           </div>
-
-          <div class="tab-panel hidden" id="tab-proxy">
-            <p>
-              When the app must keep its own Docker network, use the hub HTTP
-              proxy on localhost.
-            </p>
-            <pre id="snippet-proxy" class="code"></pre>
-            <button type="button" class="ghost" data-copy="snippet-proxy">Copy env</button>
-            <p class="hint">
-              Host apps: set the same <code>HTTP(S)_PROXY</code>. Inside another
-              container on the host network, use
-              <code>http://host.docker.internal:8888</code>.
-            </p>
+          <p id="serper-status" class="meta ollama-status" aria-live="polite"></p>
+        </div>
+        <div class="card">
+          <h3>CRM LAN (Exitly)</h3>
+          <p class="lede">
+            Conf WireGuard do CRM (<code>192.168.88.x</code>). Jak na Orb: w
+            Dockerze jednocześnie <strong>Proton</strong> (default / crawl) i
+            <code>crm0</code> (tylko LAN) w jednej sieci — bez Orb/SSH.
+          </p>
+          <label class="field">
+            <span>Nazwa tunelu</span>
+            <input id="hostwg-name" type="text" autocomplete="off" spellcheck="false" placeholder="wg0" />
+          </label>
+          <label class="field">
+            <span>Config WireGuard (wklej raz)</span>
+            <textarea id="hostwg-config" rows="10" spellcheck="false" placeholder="[Interface]&#10;PrivateKey = …&#10;Address = …&#10;&#10;[Peer]&#10;…"></textarea>
+          </label>
+          <div class="row">
+            <button type="button" class="primary" id="btn-hostwg-save">Zapisz</button>
+            <button type="button" class="ghost" id="btn-hostwg-test">Podnieś / test</button>
           </div>
-
-          <div class="tab-panel hidden" id="tab-parallel">
-            <p>
-              Need RO + HU at the same time? Start dedicated exits, then pin each
-              project to a fixed container.
-            </p>
-            <div class="chips" id="parallel-chips">
-              <label><input type="checkbox" value="ro" /> vpn-ro</label>
-              <label><input type="checkbox" value="hu" /> vpn-hu</label>
-              <label><input type="checkbox" value="bg" /> vpn-bg</label>
-            </div>
-            <div class="row">
-              <button type="button" class="primary" id="btn-parallel-up">Start selected</button>
-              <button type="button" class="ghost" id="btn-parallel-down">Stop selected</button>
-            </div>
-            <pre id="snippet-parallel" class="code"></pre>
-            <button type="button" class="ghost" data-copy="snippet-parallel">Copy snippet</button>
+          <p id="hostwg-status" class="meta ollama-status" aria-live="polite"></p>
+        </div>
+        <div class="card">
+          <h3>Klucz / hub</h3>
+          <div class="row">
+            <button type="button" class="ghost" id="btn-refresh">Odśwież</button>
+            <button type="button" class="ghost" id="btn-update-check">Aktualizacje</button>
           </div>
         </div>
-      </section>
-
-      <section class="panel log-panel">
-        <div class="log-head">
-          <h2>Activity</h2>
-          <span class="muted" id="root-path"></span>
-        </div>
-        <pre id="log" class="log"></pre>
-        <p id="error" class="error hidden"></p>
+        <details class="card log-card">
+          <summary>Dziennik aplikacji</summary>
+          <pre id="log" class="log"></pre>
+        </details>
       </section>
     </div>
+
+    <div id="modal-new" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <h2>Nowy projekt</h2>
+        <p class="lede">Gotowa baza pod Exitly. Crawl włączasz tutaj — logi też tu.</p>
+        <label class="field">
+          <span>Nazwa</span>
+          <input id="new-name" type="text" maxlength="60" placeholder="np. sklep-ro" />
+        </label>
+        <label class="field">
+          <span>Folder</span>
+          <div class="row path-row">
+            <input id="new-parent" type="text" readonly placeholder="Wybierz…" />
+            <button type="button" class="ghost" id="btn-pick-parent">Wybierz</button>
+          </div>
+        </label>
+        <label class="field">
+          <span>Kraj</span>
+          <select id="new-country"></select>
+        </label>
+        <label class="field">
+          <span>Model crawl4ai</span>
+          <select id="new-crawl-model"></select>
+        </label>
+        <label class="field">
+          <span>Model antybot</span>
+          <select id="new-antibot-model"></select>
+        </label>
+        <label class="field">
+          <span>Workery</span>
+          <select id="new-workers">
+            <option value="1" selected>1 (bezpiecznie)</option>
+            <option value="2">2</option>
+            <option value="3">3 (ryzyko blokady)</option>
+            <option value="4">4 (ryzyko blokady)</option>
+          </select>
+        </label>
+        <label class="check">
+          <input id="new-open-cursor" type="checkbox" checked />
+          Otwórz w Cursorze
+        </label>
+        <div class="options-builder">
+          <div class="row" style="justify-content: space-between; align-items: center">
+            <strong style="font-size: 13px">Opcje startu</strong>
+            <button type="button" class="ghost tiny" id="btn-add-option">+ Dodaj</button>
+          </div>
+          <p class="meta">Inputy na karcie projektu — przy Włącz trafiają do env / argumentów CLI.</p>
+          <div id="new-options-list" class="options-list"></div>
+        </div>
+        <div class="row modal-actions">
+          <button type="button" class="ghost" id="btn-new-cancel">Anuluj</button>
+          <button type="button" class="primary" id="btn-new-create">Utwórz</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modal-env" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card modal-env-card">
+        <h2>Env projektu</h2>
+        <p class="lede" id="env-project-name">Uzupełnij klucze w <code>.env</code> — zapis lokalny na dysku.</p>
+        <div id="env-fields" class="env-fields"></div>
+        <p id="env-hint" class="meta"></p>
+        <div class="row modal-actions">
+          <button type="button" class="ghost" id="btn-env-cancel">Anuluj</button>
+          <button type="button" class="primary" id="btn-env-save">Zapisz .env</button>
+        </div>
+      </div>
+    </div>
+
     <script src="renderer.js"></script>
   </body>
 </html>

@@ -24,5 +24,5 @@ Issues and PRs welcome.
 # with a real .env:
 ./bin/vpn use ro && ./bin/vpn ip
 
-cd desktop && npm start
+cd desktop && pnpm start
 ```

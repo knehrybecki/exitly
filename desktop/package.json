@@ -12,9 +12,10 @@
     "url": "https://github.com/YOUR_GITHUB_USER/exitly.git"
   },
   "private": true,
+  "packageManager": "pnpm@11.8.0",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron .",
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "dev": "env -u ELECTRON_RUN_AS_NODE electron .",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --publish never",
     "dist:mac": "electron-builder --mac --publish never",
@@ -24,7 +25,8 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18",
+    "pnpm": ">=11"
   },
   "dependencies": {
     "electron-updater": "^6.6.2"
@@ -37,6 +39,7 @@
     "appId": "app.exitly.desktop",
     "productName": "Exitly",
     "copyright": "Copyright © Exitly contributors",
+    "icon": "build/icon.png",
     "directories": {
       "output": "dist",
       "buildResources": "build"

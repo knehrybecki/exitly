@@ -37,8 +37,8 @@ Assets attach to the GitHub Release. The in-app updater reads `latest.yml` / `la
 
 ```bash
 cd desktop
-npm ci
-npm run dist:mac     # or dist:win / dist:linux / dist
+pnpm install --frozen-lockfile
+pnpm dist:mac     # or dist:win / dist:linux / dist
 ```
 
 Outputs: `desktop/dist/`.
@@ -50,7 +50,7 @@ Outputs: `desktop/dist/`.
 3. **Restart & install**
 4. Manual: banner **Check**
 
-Dev (`npm start`) cannot install updates — only packaged builds.
+Dev (`pnpm start`) cannot install updates — only packaged builds.
 
 ## Requirements on user machines
 

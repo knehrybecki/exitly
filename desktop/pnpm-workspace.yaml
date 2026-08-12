@@ -1,0 +1,6 @@
+shamefullyHoist: true
+autoInstallPeers: true
+confirmModulesPurge: false
+allowBuilds:
+  electron: true
+  electron-winstaller: true

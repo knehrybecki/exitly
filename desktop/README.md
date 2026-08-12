@@ -14,8 +14,8 @@ In-app updates use GitHub Releases (`electron-updater`).
 
 ```bash
 cd desktop
-npm install
-npm start
+pnpm install
+pnpm start
 ```
 
 Requires Docker on the host. First run: paste WireGuard PrivateKey.
@@ -23,10 +23,10 @@ Requires Docker on the host. First run: paste WireGuard PrivateKey.
 ## Build installers locally
 
 ```bash
-npm run dist:mac
-npm run dist:win
-npm run dist:linux
-npm run dist
+pnpm dist:mac
+pnpm dist:win
+pnpm dist:linux
+pnpm dist
 ```
 
 See [`../RELEASE.md`](../RELEASE.md).
@@ -35,5 +35,7 @@ See [`../RELEASE.md`](../RELEASE.md).
 
 - Connect / switch country / disconnect
 - Parallel RO/HU/BG exits
+- Crawlers panel — register Docker images, Start / Stop through the VPN exit
+- Publish app endpoints on the hub (Ollama preset, custom ports)
 - Copy Docker `network_mode` + HTTP proxy snippets
 - Auto-update banner (packaged builds)

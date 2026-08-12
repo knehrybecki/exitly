@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#064644"/>
+  <defs>
+    <radialGradient id="glow" cx="32" cy="30" r="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b6e34a" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#064644" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#glow)"/>
+  <path d="M8 34h48" stroke="#0a6b5f" stroke-width="1.5"/>
+  <path d="M10 38h10M44 38h10M8 42h8M48 42h8" stroke="#9fd63a" stroke-opacity="0.55" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="32" cy="33" r="5" fill="#b6e34a"/>
+  <path d="M20 33a12 12 0 0 1 24 0" stroke="#b6e34a" stroke-width="2" stroke-linecap="round"/>
+  <path d="M14 33a18 18 0 0 1 36 0" stroke="#b6e34a" stroke-width="1.75" stroke-linecap="round" opacity="0.85"/>
+  <path d="M9 33a23 23 0 0 1 46 0" stroke="#b6e34a" stroke-width="1.5" stroke-linecap="round" opacity="0.55"/>
+  <path d="M18 62 L28 34 H36 L46 62 Z" fill="#022524"/>
+  <path d="M20 48h24M22 54h20M24 42h16" stroke="#064644" stroke-width="1.25" opacity="0.9"/>
+  <rect x="17" y="46" width="4.5" height="16" rx="2" fill="#011a19"/>
+  <rect x="42.5" y="46" width="4.5" height="16" rx="2" fill="#011a19"/>
+  <rect x="24" y="38" width="3.5" height="10" rx="1.5" fill="#011a19"/>
+  <rect x="36.5" y="38" width="3.5" height="10" rx="1.5" fill="#011a19"/>
+</svg>

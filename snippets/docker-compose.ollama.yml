@@ -1,0 +1,19 @@
+# Ollama behind the Exitly hub (Proton exit).
+#
+# 1) In the desktop app: Connect any app → Endpoints → Add Ollama
+#    (publishes 11434 on container proton-vpn)
+# 2) Connect / reconnect the hub so Docker applies the port
+# 3) Start this stack from your project folder
+#
+# API: http://127.0.0.1:11434
+# OpenAI-compatible clients: base URL http://127.0.0.1:11434/v1
+
+services:
+  ollama:
+    image: ollama/ollama
+    network_mode: "container:proton-vpn"
+    volumes:
+      - ollama:/root/.ollama
+
+volumes:
+  ollama:
