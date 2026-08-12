@@ -16,7 +16,25 @@ Built on [Gluetun](https://github.com/qdm12/gluetun). Your apps just attach with
 - ProtonVPN account (WireGuard)
 - `/dev/net/tun` (Linux, OrbStack, Docker Desktop with VPN-capable VM)
 
-## Quick start
+## Quick start (Desktop app — recommended)
+
+No terminal required after the first key paste:
+
+```bash
+git clone https://github.com/YOUR_USER/vpn-hub.git
+cd vpn-hub/desktop
+npm install
+npm start
+```
+
+1. Paste Proton WireGuard **PrivateKey** in the setup screen  
+   ([Proton WireGuard configs](https://account.proton.me/u/0/vpn/WireGuard))
+2. Choose a country → **Connect**
+3. Open the **Connect any app** panel and copy the snippet for Docker or HTTP proxy
+
+Details: [`desktop/README.md`](desktop/README.md).
+
+## Quick start (CLI)
 
 ```bash
 git clone https://github.com/YOUR_USER/vpn-hub.git
@@ -40,7 +58,11 @@ Optional PATH install:
 ln -sf "$(pwd)/bin/vpn" ~/.local/bin/vpn
 ```
 
-## Use from any project
+## Connect any app
+
+### Option A — Docker `network_mode` (best)
+
+With the hub connected (`proton-vpn` running), add this to **any** project compose file:
 
 ```yaml
 services:
@@ -49,7 +71,38 @@ services:
     network_mode: "container:proton-vpn"
 ```
 
-See [`snippets/docker-compose.app.yml`](snippets/docker-compose.app.yml).
+- All outbound traffic from that service uses the Proton exit
+- Switching country in the desktop app / `vpn use` does **not** require changing the project
+- See [`snippets/docker-compose.app.yml`](snippets/docker-compose.app.yml)
+
+### Option B — HTTP proxy
+
+Hub exposes a proxy on `127.0.0.1:8888` while connected:
+
+```bash
+export HTTP_PROXY=http://127.0.0.1:8888
+export HTTPS_PROXY=http://127.0.0.1:8888
+export NO_PROXY=localhost,127.0.0.1
+```
+
+From another container (own network): `http://host.docker.internal:8888`.
+
+### Option C — Fixed country per project (parallel)
+
+```bash
+./bin/vpn up ro hu
+```
+
+```yaml
+# project A
+network_mode: "container:vpn-ro"
+# project B
+network_mode: "container:vpn-hu"
+```
+
+### Non-Docker / host processes
+
+Use Option B (proxy env vars), or run the process inside a container attached with Option A.
 
 Switch exit without touching the app:
 

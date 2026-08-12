@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; script-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>vpn-hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="bg" aria-hidden="true"></div>
+    <div class="app">
+      <header class="top">
+        <div>
+          <p class="eyebrow">Proton exit for every project</p>
+          <h1>vpn-hub</h1>
+        </div>
+        <div class="top-actions">
+          <button type="button" class="ghost" id="btn-reveal">Open folder</button>
+          <button type="button" class="ghost" id="btn-refresh">Refresh</button>
+        </div>
+      </header>
+
+      <section id="setup" class="panel setup hidden">
+        <h2>One-time setup</h2>
+        <p>
+          Paste your Proton <strong>WireGuard PrivateKey</strong>. One key works
+          for all countries. Nothing is uploaded — it is saved only in local
+          <code>.env</code>.
+        </p>
+        <label class="field">
+          <span>PrivateKey</span>
+          <input
+            id="private-key"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="base64 WireGuard private key"
+          />
+        </label>
+        <div class="row">
+          <button type="button" class="ghost" id="btn-key-help">How to get the key</button>
+          <button type="button" class="primary" id="btn-save-key">Save &amp; continue</button>
+        </div>
+      </section>
+
+      <section id="main-ui" class="grid hidden">
+        <div class="panel hero-panel">
+          <div class="status-row">
+            <span class="dot" id="status-dot"></span>
+            <div>
+              <p class="status-label" id="status-label">Checking…</p>
+              <p class="status-sub" id="status-sub">—</p>
+            </div>
+          </div>
+
+          <label class="field">
+            <span>Exit country</span>
+            <select id="country"></select>
+          </label>
+
+          <div class="row actions">
+            <button type="button" class="primary" id="btn-connect">Connect</button>
+            <button type="button" class="danger" id="btn-disconnect" disabled>
+              Disconnect
+            </button>
+          </div>
+
+          <div class="ip-box" id="ip-box">
+            <div>
+              <span class="muted">Public IP</span>
+              <strong id="ip-value">—</strong>
+            </div>
+            <div>
+              <span class="muted">Geo</span>
+              <strong id="ip-geo">—</strong>
+            </div>
+            <button type="button" class="ghost tiny" id="btn-ip">Check IP</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Connect any app</h2>
+          <p class="lede">
+            Keep the hub running here. Point your Docker app at the shared
+            tunnel — no Proton code inside the project.
+          </p>
+
+          <div class="tabs" role="tablist">
+            <button type="button" class="tab active" data-tab="docker">Docker</button>
+            <button type="button" class="tab" data-tab="proxy">HTTP proxy</button>
+            <button type="button" class="tab" data-tab="parallel">Parallel</button>
+          </div>
+
+          <div class="tab-panel" id="tab-docker">
+            <p>Best option. All traffic from the container goes through Proton.</p>
+            <pre id="snippet-compose" class="code"></pre>
+            <button type="button" class="ghost" data-copy="snippet-compose">Copy compose</button>
+            <p class="hint">
+              Hub container name stays <code>proton-vpn</code>. Switch country in
+              this app; your project compose does not change.
+            </p>
+          </div>
+
+          <div class="tab-panel hidden" id="tab-proxy">
+            <p>
+              When the app must keep its own Docker network, use the hub HTTP
+              proxy on localhost.
+            </p>
+            <pre id="snippet-proxy" class="code"></pre>
+            <button type="button" class="ghost" data-copy="snippet-proxy">Copy env</button>
+            <p class="hint">
+              Host apps: set the same <code>HTTP(S)_PROXY</code>. Inside another
+              container on the host network, use
+              <code>http://host.docker.internal:8888</code>.
+            </p>
+          </div>
+
+          <div class="tab-panel hidden" id="tab-parallel">
+            <p>
+              Need RO + HU at the same time? Start dedicated exits, then pin each
+              project to a fixed container.
+            </p>
+            <div class="chips" id="parallel-chips">
+              <label><input type="checkbox" value="ro" /> vpn-ro</label>
+              <label><input type="checkbox" value="hu" /> vpn-hu</label>
+              <label><input type="checkbox" value="bg" /> vpn-bg</label>
+            </div>
+            <div class="row">
+              <button type="button" class="primary" id="btn-parallel-up">Start selected</button>
+              <button type="button" class="ghost" id="btn-parallel-down">Stop selected</button>
+            </div>
+            <pre id="snippet-parallel" class="code"></pre>
+            <button type="button" class="ghost" data-copy="snippet-parallel">Copy snippet</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel log-panel">
+        <div class="log-head">
+          <h2>Activity</h2>
+          <span class="muted" id="root-path"></span>
+        </div>
+        <pre id="log" class="log"></pre>
+        <p id="error" class="error hidden"></p>
+      </section>
+    </div>
+    <script src="renderer.js"></script>
+  </body>
+</html>

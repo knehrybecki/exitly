@@ -1,0 +1,17 @@
+{
+  "name": "vpn-hub-desktop",
+  "version": "1.0.0",
+  "description": "Desktop UI for vpn-hub — switch ProtonVPN exits without the terminal",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "electron": "^35.1.2"
+  }
+}
