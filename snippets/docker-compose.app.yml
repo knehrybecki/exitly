@@ -1,0 +1,17 @@
+# Drop-in example for any project that should exit via the hub.
+#
+# 1) Switchable default exit (./bin/vpn use ro|hu|bg|…):
+#      network_mode: "container:proton-vpn"
+#
+# 2) Fixed country while other projects use other exits:
+#      network_mode: "container:vpn-ro"   # or vpn-hu / vpn-bg
+#
+# 3) HTTP proxy instead of network_mode (app keeps its own network):
+#      HTTP(S)_PROXY=http://host.docker.internal:8888
+#      (requires hub: vpn use <country> with HTTPPROXY=on)
+
+services:
+  app:
+    image: alpine:3.20
+    network_mode: "container:proton-vpn"
+    command: ["sh", "-c", "wget -qO- https://ipinfo.io && sleep infinity"]

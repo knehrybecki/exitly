@@ -1,0 +1,12 @@
+# Ignore local secrets / state
+.env
+.active
+secrets/*
+!secrets/.gitkeep
+*.bak
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp

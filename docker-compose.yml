@@ -1,0 +1,65 @@
+# Shared ProtonVPN hub via Gluetun.
+# Active exit:  container proton-vpn   →  ./bin/vpn use ro|hu|bg|…
+# Parallel:     ./bin/vpn up ro hu     →  vpn-ro, vpn-hu
+
+x-gluetun: &gluetun
+  image: qmcgaw/gluetun:latest
+  cap_add:
+    - NET_ADMIN
+  devices:
+    - /dev/net/tun:/dev/net/tun
+  env_file:
+    - .env
+  environment:
+    VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER:-protonvpn}
+    VPN_TYPE: ${VPN_TYPE:-wireguard}
+    HTTPPROXY: ${HTTPPROXY:-on}
+    HTTPPROXY_LISTENING_ADDRESS: ${HTTPPROXY_LISTENING_ADDRESS:-:8888}
+  restart: unless-stopped
+
+services:
+  # Default alias for apps: network_mode: "container:proton-vpn"
+  vpn:
+    <<: *gluetun
+    container_name: proton-vpn
+    environment:
+      VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER:-protonvpn}
+      VPN_TYPE: ${VPN_TYPE:-wireguard}
+      SERVER_COUNTRIES: ${SERVER_COUNTRIES:-Romania}
+      HTTPPROXY: ${HTTPPROXY:-on}
+      HTTPPROXY_LISTENING_ADDRESS: ${HTTPPROXY_LISTENING_ADDRESS:-:8888}
+    ports:
+      - "${HTTP_PROXY_PORT:-8888}:8888/tcp"
+
+  vpn-ro:
+    <<: *gluetun
+    container_name: vpn-ro
+    profiles: ["ro", "all"]
+    environment:
+      VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER:-protonvpn}
+      VPN_TYPE: ${VPN_TYPE:-wireguard}
+      SERVER_COUNTRIES: Romania
+      HTTPPROXY: ${HTTPPROXY:-on}
+      HTTPPROXY_LISTENING_ADDRESS: ${HTTPPROXY_LISTENING_ADDRESS:-:8888}
+
+  vpn-hu:
+    <<: *gluetun
+    container_name: vpn-hu
+    profiles: ["hu", "all"]
+    environment:
+      VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER:-protonvpn}
+      VPN_TYPE: ${VPN_TYPE:-wireguard}
+      SERVER_COUNTRIES: Hungary
+      HTTPPROXY: ${HTTPPROXY:-on}
+      HTTPPROXY_LISTENING_ADDRESS: ${HTTPPROXY_LISTENING_ADDRESS:-:8888}
+
+  vpn-bg:
+    <<: *gluetun
+    container_name: vpn-bg
+    profiles: ["bg", "all"]
+    environment:
+      VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER:-protonvpn}
+      VPN_TYPE: ${VPN_TYPE:-wireguard}
+      SERVER_COUNTRIES: Bulgaria
+      HTTPPROXY: ${HTTPPROXY:-on}
+      HTTPPROXY_LISTENING_ADDRESS: ${HTTPPROXY_LISTENING_ADDRESS:-:8888}

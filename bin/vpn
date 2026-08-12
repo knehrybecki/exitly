@@ -1,0 +1,278 @@
+#!/usr/bin/env bash
+# ProtonVPN hub CLI — switch exit country or run parallel country tunnels.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+COUNTRIES_FILE="$ROOT/countries.conf"
+ACTIVE_FILE="$ROOT/.active"
+ENV_FILE="$ROOT/.env"
+COMPOSE=(docker compose -f "$ROOT/docker-compose.yml")
+
+usage() {
+  cat <<'EOF'
+Usage: vpn <command> [country...]
+
+Setup:
+  vpn setup              Copy .env.example → .env (then edit the key)
+  vpn countries          List country codes
+
+Switch (single active exit → container proton-vpn):
+  vpn use <country>      Set country and recreate proton-vpn
+  vpn switch <country>   Alias for: vpn use
+  vpn up                 Start active proton-vpn
+  vpn down               Stop proton-vpn
+  vpn which              Print network_mode for the active exit
+  vpn active             Show active country code
+
+Parallel (separate vpn-ro, vpn-hu, … containers):
+  vpn up ro [hu bg]      Start selected exits
+  vpn up all             Start ro+hu+bg
+  vpn down ro [hu]       Stop selected
+  vpn down all           Stop everything (including proton-vpn)
+
+Status:
+  vpn status             Containers + active country
+  vpn ip [country|active]  Public IP (default: active)
+
+Examples:
+  vpn setup
+  vpn use ro             # apps: network_mode: "container:proton-vpn"
+  vpn use hu             # switch to Hungary
+  vpn up ro hu           # two exits at once → vpn-ro / vpn-hu
+  vpn ip
+EOF
+}
+
+die() { echo "vpn: $*" >&2; exit 1; }
+
+need_docker() {
+  command -v docker >/dev/null 2>&1 || die "docker not found"
+  docker compose version >/dev/null 2>&1 || die "docker compose not found"
+}
+
+need_env() {
+  need_docker
+  [[ -f "$ENV_FILE" ]] || die "missing .env — run: vpn setup"
+  if grep -q 'PASTE_PRIVATE_KEY_HERE' "$ENV_FILE" 2>/dev/null; then
+    die "set WIREGUARD_PRIVATE_KEY in .env (Proton → WireGuard → PrivateKey)"
+  fi
+}
+
+resolve_country() {
+  local code="${1:-}"
+  [[ -n "$code" ]] || die "pass a country code (e.g. ro)"
+  code="$(printf '%s' "$code" | tr '[:upper:]' '[:lower:]')"
+  local line name
+  line="$(grep -E "^${code}=" "$COUNTRIES_FILE" 2>/dev/null | head -1 || true)"
+  [[ -n "$line" ]] || die "unknown country '$code' — see: vpn countries"
+  name="${line#*=}"
+  printf '%s\t%s\n' "$code" "$name"
+}
+
+read_active() {
+  if [[ -f "$ACTIVE_FILE" ]]; then
+    tr '[:upper:]' '[:lower:]' <"$ACTIVE_FILE" | tr -d '[:space:]'
+    return
+  fi
+  if [[ -f "$ENV_FILE" ]]; then
+    local v
+    v="$(grep -E '^ACTIVE_COUNTRY=' "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr '[:upper:]' '[:lower:]' || true)"
+    [[ -n "$v" ]] && { printf '%s\n' "$v"; return; }
+  fi
+  printf '%s\n' "ro"
+}
+
+# Portable in-place env upsert (macOS + Linux)
+upsert_env() {
+  local key="$1" value="$2"
+  local tmp
+  tmp="$(mktemp)"
+  if [[ -f "$ENV_FILE" ]] && grep -q "^${key}=" "$ENV_FILE"; then
+    awk -v k="$key" -v v="$value" '
+      BEGIN { done=0 }
+      index($0, k "=")==1 && !done { print k "=" v; done=1; next }
+      { print }
+      END { if (!done) print k "=" v }
+    ' "$ENV_FILE" >"$tmp"
+  else
+    cat "$ENV_FILE" 2>/dev/null >"$tmp" || true
+    printf '%s=%s\n' "$key" "$value" >>"$tmp"
+  fi
+  mv "$tmp" "$ENV_FILE"
+}
+
+write_active() {
+  local code="$1" name="$2"
+  printf '%s\n' "$code" >"$ACTIVE_FILE"
+  if [[ -f "$ENV_FILE" ]]; then
+    upsert_env ACTIVE_COUNTRY "$code"
+    upsert_env SERVER_COUNTRIES "$name"
+  fi
+}
+
+cmd_setup() {
+  if [[ -f "$ENV_FILE" ]]; then
+    echo ".env already exists: $ENV_FILE"
+  else
+    cp "$ROOT/.env.example" "$ENV_FILE"
+    echo "Created $ENV_FILE"
+  fi
+  cat <<'EOF'
+
+Next:
+  1. Open https://account.proton.me/u/0/vpn/WireGuard
+  2. Generate a config (any server) → copy PrivateKey
+  3. Paste into WIREGUARD_PRIVATE_KEY in .env
+  4. Run: vpn use ro
+EOF
+}
+
+cmd_countries() {
+  echo "Country codes (countries.conf):"
+  grep -E '^[a-z]{2}=' "$COUNTRIES_FILE" | sed 's/=/	→  /'
+}
+
+cmd_use() {
+  need_env
+  local code name
+  IFS=$'\t' read -r code name < <(resolve_country "${1:-}")
+  write_active "$code" "$name"
+  echo "Active country: $code ($name)"
+  echo "Recreating container proton-vpn..."
+  SERVER_COUNTRIES="$name" "${COMPOSE[@]}" up -d --force-recreate --remove-orphans vpn
+  echo
+  echo "In your app compose:"
+  echo "  network_mode: \"container:proton-vpn\""
+  echo "Optional HTTP proxy: http://127.0.0.1:8888"
+  sleep 2
+  cmd_ip active || true
+}
+
+cmd_up_active() {
+  need_env
+  local code name
+  code="$(read_active)"
+  IFS=$'\t' read -r code name < <(resolve_country "$code")
+  write_active "$code" "$name"
+  SERVER_COUNTRIES="$name" "${COMPOSE[@]}" up -d vpn
+  echo "proton-vpn UP ($code / $name)"
+}
+
+cmd_up_multi() {
+  need_env
+  local args=("$@")
+  if [[ ${#args[@]} -eq 1 && "${args[0]}" == "all" ]]; then
+    "${COMPOSE[@]}" --profile all up -d vpn-ro vpn-hu vpn-bg
+    echo "UP: vpn-ro vpn-hu vpn-bg"
+    return
+  fi
+  local c profiles=() services=()
+  for c in "${args[@]}"; do
+    c="$(printf '%s' "$c" | tr '[:upper:]' '[:lower:]')"
+    case "$c" in
+      ro|hu|bg)
+        profiles+=(--profile "$c")
+        services+=("vpn-$c")
+        ;;
+      *)
+        die "parallel exits shipped for ro|hu|bg only (extend docker-compose.yml). For others: vpn use $c"
+        ;;
+    esac
+  done
+  "${COMPOSE[@]}" "${profiles[@]}" up -d "${services[@]}"
+  echo "UP: ${services[*]}"
+}
+
+cmd_down() {
+  need_docker
+  if [[ $# -eq 0 || "${1:-}" == "active" ]]; then
+    "${COMPOSE[@]}" stop vpn 2>/dev/null || true
+    "${COMPOSE[@]}" rm -f vpn 2>/dev/null || true
+    echo "proton-vpn DOWN"
+    return
+  fi
+  if [[ "${1:-}" == "all" ]]; then
+    "${COMPOSE[@]}" --profile all down --remove-orphans 2>/dev/null || true
+    docker rm -f proton-vpn vpn-ro vpn-hu vpn-bg 2>/dev/null || true
+    echo "All VPN containers DOWN"
+    return
+  fi
+  local c
+  for c in "$@"; do
+    c="$(printf '%s' "$c" | tr '[:upper:]' '[:lower:]')"
+    docker rm -f "vpn-$c" 2>/dev/null || true
+    echo "vpn-$c DOWN"
+  done
+}
+
+cmd_status() {
+  need_docker
+  local active
+  active="$(read_active)"
+  echo "Active (proton-vpn): $active"
+  echo
+  docker ps -a --filter "name=proton-vpn" --filter "name=vpn-ro" --filter "name=vpn-hu" --filter "name=vpn-bg" \
+    --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true
+}
+
+cmd_ip() {
+  need_docker
+  local target="${1:-active}" cont=""
+  target="$(printf '%s' "$target" | tr '[:upper:]' '[:lower:]')"
+  case "$target" in
+    active|vpn|proton|proton-vpn) cont="proton-vpn" ;;
+    *) cont="vpn-$target" ;;
+  esac
+  docker inspect "$cont" >/dev/null 2>&1 || die "container $cont not found — run vpn use … / vpn up …"
+  printf '%s → ' "$cont"
+  docker exec "$cont" wget -qO- https://ipinfo.io/json 2>/dev/null \
+    || docker exec "$cont" wget -qO- https://ifconfig.me 2>/dev/null \
+    || die "could not fetch IP (still connecting? wait, then: vpn ip)"
+  echo
+}
+
+cmd_which() {
+  local active
+  active="$(read_active)"
+  echo "Active country: $active"
+  echo "network_mode: \"container:proton-vpn\""
+  echo "# or fixed exit: network_mode: \"container:vpn-${active}\""
+}
+
+main() {
+  local cmd="${1:-}"
+  shift || true
+  case "$cmd" in
+    ""|-h|--help|help) usage ;;
+    setup) cmd_setup ;;
+    countries|list) cmd_countries ;;
+    use|switch)
+      [[ $# -ge 1 ]] || die "vpn use <country>"
+      cmd_use "$1"
+      ;;
+    up)
+      if [[ $# -eq 0 ]]; then
+        cmd_up_active
+      else
+        cmd_up_multi "$@"
+      fi
+      ;;
+    down|stop) cmd_down "$@" ;;
+    status|ps) cmd_status ;;
+    ip) cmd_ip "${1:-active}" ;;
+    which)
+      cmd_which
+      ;;
+    active)
+      read_active
+      ;;
+    *)
+      usage
+      die "unknown command: $cmd"
+      ;;
+  esac
+}
+
+main "$@"
