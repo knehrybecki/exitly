@@ -9,21 +9,41 @@ Exitly Desktop ships installers for **macOS**, **Windows**, and **Linux**, and u
    - `desktop/package.json` → `homepage`, `repository.url`, `build.publish[0].owner`
 3. Commit and push.
 
-Optional Apple notarization secrets (macOS Gatekeeper):
+## macOS: open without Gatekeeper (“damaged”)
 
-- `CSC_LINK` / `CSC_KEY_PASSWORD` — Developer ID certificate
-- `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID`
+Apple blocks **unsigned** apps downloaded from the internet. The only real fix is
+**Developer ID signing + notarization** (Apple Developer Program, ~$99/year).
 
-Without them, macOS builds still upload, but Gatekeeper may say the app is **damaged** after download. Clear quarantine once:
+### One-time Apple setup
+
+1. Enroll at https://developer.apple.com/programs/
+2. Create certificate **Developer ID Application** (Certificates, Identifiers & Profiles)
+3. Install it in Keychain, then from `desktop/`:
 
 ```bash
-cd ~/Downloads
-unzip -o Exitly-*-mac-arm64.zip
-xattr -cr Exitly.app
-open Exitly.app
+bash scripts/export-apple-signing.sh
 ```
 
-Or: right-click `Exitly.app` → **Open** → confirm.
+4. Create an [app-specific password](https://appleid.apple.com) and note your **Team ID**
+5. Set GitHub Actions secrets (script prints `gh secret set …` commands):
+
+| Secret | Value |
+|--------|--------|
+| `CSC_LINK` | Base64 of the `.p12` |
+| `CSC_KEY_PASSWORD` | Password used when exporting `.p12` |
+| `APPLE_ID` | Apple ID email |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password |
+| `APPLE_TEAM_ID` | 10-char Team ID |
+
+6. Cut a new release tag — CI signs + notarizes the macOS zip. Gatekeeper opens it with a normal double-click.
+
+Without secrets, macOS may say the app is **damaged**. Temporary unblock only:
+
+```bash
+xattr -cr ~/Downloads/Exitly.app && open ~/Downloads/Exitly.app
+```
+
+There is no code-only bypass for downloads from GitHub.
 
 ## Cut a release
 

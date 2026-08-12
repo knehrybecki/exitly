@@ -74,6 +74,7 @@ jobs:
 
       # Secrets expand to "" when missing; electron-builder treats empty CSC_LINK
       # as a cert path (cwd) and fails with "…/desktop not a file".
+      # With CSC_LINK + APPLE_* set: Developer ID sign + notarize (no Gatekeeper block).
       - name: Build and upload GitHub Release assets
         shell: bash
         env:
@@ -84,15 +85,23 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD_RAW: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID_RAW: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -n "$CSC_LINK_RAW" ]; then
+          set -euo pipefail
+          if [ -n "${CSC_LINK_RAW:-}" ]; then
             export CSC_LINK="$CSC_LINK_RAW"
-            export CSC_KEY_PASSWORD="$CSC_KEY_PASSWORD_RAW"
+            export CSC_KEY_PASSWORD="${CSC_KEY_PASSWORD_RAW:-}"
+            echo "macOS signing: CSC_LINK present"
           else
             export CSC_IDENTITY_AUTO_DISCOVERY=false
+            if [[ "${{ matrix.os }}" == macos-* ]]; then
+              echo "::warning::CSC_LINK missing — macOS build will be UNSIGNED (Gatekeeper 'damaged' dialog)."
+            fi
           fi
-          if [ -n "$APPLE_ID_RAW" ]; then
+          if [ -n "${APPLE_ID_RAW:-}" ]; then
             export APPLE_ID="$APPLE_ID_RAW"
-            export APPLE_APP_SPECIFIC_PASSWORD="$APPLE_APP_SPECIFIC_PASSWORD_RAW"
-            export APPLE_TEAM_ID="$APPLE_TEAM_ID_RAW"
+            export APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD_RAW:-}"
+            export APPLE_TEAM_ID="${APPLE_TEAM_ID_RAW:-}"
+            echo "macOS notarization: APPLE_ID present"
+          elif [[ "${{ matrix.os }}" == macos-* ]] && [ -n "${CSC_LINK_RAW:-}" ]; then
+            echo "::warning::APPLE_ID missing — signed but not notarized; Gatekeeper may still block downloads."
           fi
           pnpm exec electron-builder ${{ matrix.args }} --publish always
