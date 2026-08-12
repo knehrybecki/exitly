@@ -1,12 +1,45 @@
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
-const { spawn } = require("child_process");
+// @ts-nocheck
+/** Hub core migrated from hub.js; util/* is strict TypeScript. */
+import fs from "fs";
+import os from "os";
+import path from "path";
+import { spawn } from "child_process";
+import http from "http";
+import https from "https";
+import net from "net";
+import { createRequire } from "module";
+import {
+  slugifyName,
+  sanitizeContainerName,
+  containerNamesForSlug,
+  uniqueProjectDir,
+  resolveTargetProjectDir,
+  newCrawlerId,
+} from "./util/names";
+import {
+  parseCommand,
+  shellQuote,
+  powershellQuote,
+  normalizeCliArgs,
+} from "./util/command";
+import {
+  slugOptionId,
+  normalizeStartOptions,
+  normalizeOptionValues,
+  applyStartOptions,
+} from "./util/options";
+import { shouldSkipExportEntry } from "./util/export-filter";
+
+const nodeRequire = createRequire(__filename);
+
+function desktopRoot() {
+  // Compiled to lib/hub/*.js → desktop package root is ../..
+  return path.resolve(__dirname, "..", "..");
+}
 
 function tryElectronApp() {
   try {
-    // eslint-disable-next-line global-require
-    return require("electron").app;
+    return nodeRequire("electron").app;
   } catch {
     return null;
   }
@@ -22,7 +55,7 @@ function getResourcesHub() {
   if (isPackaged()) {
     return path.join(process.resourcesPath, "hub");
   }
-  return path.resolve(__dirname, "..");
+  return path.resolve(desktopRoot(), "..");
 }
 
 /**
@@ -34,7 +67,7 @@ function getHubRoot() {
     const electronApp = tryElectronApp();
     return path.join(electronApp.getPath("userData"), "hub");
   }
-  return path.resolve(__dirname, "..");
+  return path.resolve(desktopRoot(), "..");
 }
 
 function ensureDir(p) {
@@ -504,7 +537,6 @@ function parseMcpEndpoint(url) {
 }
 
 function probeTcpHostPort(host, port, timeoutMs = 4000) {
-  const net = require('net');
   return new Promise((resolve) => {
     const socket = net.connect({ host, port: Number(port) }, () => {
       socket.end();
@@ -530,7 +562,7 @@ function httpJsonRequest(url, { method = 'GET', headers = {}, body, timeoutMs = 
       resolve({ ok: false, error: err.message || 'bad url' });
       return;
     }
-    const lib = u.protocol === 'https:' ? require('https') : require('http');
+    const lib = u.protocol === 'https:' ? https : http;
     const payload = body == null ? null : Buffer.from(String(body), 'utf8');
     const req = lib.request(
       {
@@ -883,56 +915,6 @@ const CRAWLER_EXITS = [
   { id: 'vpn-hu', label: 'Parallel HU (vpn-hu)' },
   { id: 'vpn-bg', label: 'Parallel BG (vpn-bg)' },
 ];
-
-function newCrawlerId() {
-  return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function sanitizeContainerName(id) {
-  const slug = String(id || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, '')
-    .slice(0, 40);
-  return `exitly-crawler-${slug || 'x'}`;
-}
-
-function slugifyName(name) {
-  return (
-    String(name || '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || 'project'
-  );
-}
-
-function parseCommand(cmd) {
-  const text = String(cmd || '').trim();
-  if (!text) return [];
-  const parts = [];
-  let cur = '';
-  let quote = null;
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i];
-    if (quote) {
-      if (ch === quote) quote = null;
-      else cur += ch;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      continue;
-    }
-    if (/\s/.test(ch)) {
-      if (cur) parts.push(cur);
-      cur = '';
-      continue;
-    }
-    cur += ch;
-  }
-  if (cur) parts.push(cur);
-  return parts;
-}
 
 /** Map legacy shared-exit ids → country code for per-project tunnels */
 function resolveProjectCountry(value, fallback = 'ro') {
@@ -1565,7 +1547,7 @@ function writeCrm0ConfFile(dir, parsed) {
 function ensureCrmWgBuildContext(dir) {
   const dest = path.join(dir, 'crm-wg');
   ensureDir(dest);
-  const src = path.join(__dirname, 'templates', 'crm-wg', 'Dockerfile');
+  const src = path.join(desktopRoot(), 'templates', 'crm-wg', 'Dockerfile');
   fs.copyFileSync(src, path.join(dest, 'Dockerfile'));
   return dest;
 }
@@ -2132,87 +2114,6 @@ async function setProjectEnv(id, values, { onLog } = {}) {
   return getProjectEnv(id);
 }
 
-function normalizeCliArgs(value) {
-  if (Array.isArray(value)) {
-    return value
-      .map((a) => String(a))
-      .filter(Boolean)
-      .slice(0, 40);
-  }
-  if (typeof value === 'string' && value.trim()) {
-    return value.trim().split(/\s+/).filter(Boolean).slice(0, 40);
-  }
-  return [];
-}
-
-const START_OPTION_TYPES = new Set(['text', 'number', 'checkbox', 'select']);
-
-function slugOptionId(raw) {
-  return String(raw || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 40);
-}
-
-function normalizeStartOptions(list) {
-  if (!Array.isArray(list)) return [];
-  const seen = new Set();
-  const out = [];
-  for (const item of list) {
-    if (!item || typeof item !== 'object') continue;
-    const id = slugOptionId(item.id || item.key || item.name || item.label) || `opt_${out.length + 1}`;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const type = START_OPTION_TYPES.has(item.type) ? item.type : 'text';
-    const apply = item.apply === 'arg' || item.apply === 'both' ? item.apply : 'env';
-    const opt = {
-      id,
-      label:
-        String(item.label || id)
-          .trim()
-          .slice(0, 80) || id,
-      type,
-      default: item.default == null ? (type === 'checkbox' ? '0' : '') : String(item.default),
-      required: !!item.required,
-      apply,
-      env: String(item.env || `EXITLY_OPT_${id.toUpperCase()}`)
-        .trim()
-        .replace(/[^A-Za-z0-9_]/g, '')
-        .slice(0, 60),
-      arg: String(item.arg || '')
-        .trim()
-        .slice(0, 80),
-      placeholder: String(item.placeholder || '').slice(0, 120),
-      choices: Array.isArray(item.choices)
-        ? item.choices
-            .map((c) => String(c).slice(0, 80))
-            .filter(Boolean)
-            .slice(0, 30)
-        : [],
-    };
-    if (!opt.env) opt.env = `EXITLY_OPT_${id.toUpperCase()}`;
-    out.push(opt);
-    if (out.length >= 20) break;
-  }
-  return out;
-}
-
-function normalizeOptionValues(values, options) {
-  const opts = normalizeStartOptions(options);
-  const src = values && typeof values === 'object' ? values : {};
-  const out = {};
-  for (const opt of opts) {
-    if (Object.prototype.hasOwnProperty.call(src, opt.id)) {
-      out[opt.id] = String(src[opt.id] ?? '');
-    } else {
-      out[opt.id] = String(opt.default ?? '');
-    }
-  }
-  return out;
-}
-
 function resolveProjectStartOptions(projectDir, crawler = null) {
   const meta = readProjectMeta(projectDir) || {};
   const fromMeta = normalizeStartOptions(meta.options);
@@ -2227,46 +2128,6 @@ function resolveProjectOptionValues(projectDir, crawler = null) {
 }
 
 /** Build env + CLI args from option values for start. */
-function applyStartOptions(options, values) {
-  const opts = normalizeStartOptions(options);
-  const vals = normalizeOptionValues(values, opts);
-  const env = {};
-  const args = [];
-  const missing = [];
-  for (const opt of opts) {
-    let raw = vals[opt.id];
-    if (opt.type === 'checkbox') {
-      const on = /^(1|true|yes|on)$/i.test(String(raw).trim());
-      raw = on ? '1' : '0';
-      vals[opt.id] = raw;
-      if (opt.apply === 'env' || opt.apply === 'both') {
-        env[opt.env] = raw;
-      }
-      if ((opt.apply === 'arg' || opt.apply === 'both') && on && opt.arg) {
-        args.push(opt.arg);
-      }
-      continue;
-    }
-    const text = String(raw ?? '').trim();
-    if (opt.required && !text) missing.push(opt.id);
-    if (opt.apply === 'env' || opt.apply === 'both') {
-      env[opt.env] = text;
-    }
-    if ((opt.apply === 'arg' || opt.apply === 'both') && text) {
-      if (opt.arg) {
-        args.push(opt.arg, text);
-      } else {
-        args.push(text);
-      }
-    }
-  }
-  return { env, args, values: vals, missing };
-}
-
-function shellQuote(value) {
-  return `'${String(value).replace(/'/g, `'\\''`)}'`;
-}
-
 function parsePyprojectScripts(projectDir) {
   const file = path.join(projectDir, 'pyproject.toml');
   if (!fs.existsSync(file)) return [];
@@ -2991,7 +2852,7 @@ function ensureDedicatedTunnelCompose(crawler) {
 }
 
 function projectTemplateRoot() {
-  return path.join(__dirname, 'templates', 'project');
+  return path.join(desktopRoot(), 'templates', 'project');
 }
 
 function copyTemplateTree(srcDir, destDir, { replace = {} } = {}) {
@@ -3157,8 +3018,7 @@ async function createProject(
   const id = newCrawlerId();
   const chosen = resolveProjectCountry(country || exit || readActive(), 'ro');
   const { name: countryName } = resolveCountry(chosen);
-  const vpnContainerName = `exitly-vpn-${folder}-${id.slice(-4)}`;
-  const containerName = `exitly-proj-${folder}-${id.slice(-4)}`;
+  const { vpnContainerName, containerName } = containerNamesForSlug(folder, id);
   const crawl = normalizeModelName(crawlModel, DEFAULT_CRAWL_MODEL);
   const antibot = normalizeModelName(antibotModel, DEFAULT_ANTIBOT_MODEL);
   const workerCount = normalizeWorkers(workers, DEFAULT_WORKERS);
@@ -3186,22 +3046,32 @@ async function createProject(
     workers: workerCount,
   });
 
-  const crawler = await addCrawler({
-    id,
-    kind: 'project',
-    name: cleanName,
-    path: projectDir,
-    country: chosen,
-    runMode: 'docker',
-    vpnContainerName,
-    containerName,
-    service: 'app',
-    crawlModel: crawl,
-    antibotModel: antibot,
-    workers: workerCount,
-    options: startOptions,
-    optionValues: startValues,
-  });
+  let crawler;
+  try {
+    crawler = await addCrawler({
+      id,
+      kind: 'project',
+      name: cleanName,
+      path: projectDir,
+      country: chosen,
+      runMode: 'docker',
+      vpnContainerName,
+      containerName,
+      service: 'app',
+      crawlModel: crawl,
+      antibotModel: antibot,
+      workers: workerCount,
+      options: startOptions,
+      optionValues: startValues,
+    });
+  } catch (err) {
+    try {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    } catch {
+      /* best-effort rollback */
+    }
+    throw err;
+  }
 
   if (openCursor) {
     try {
@@ -3212,37 +3082,6 @@ async function createProject(
   }
 
   return crawler;
-}
-
-const PROJECT_EXPORT_SKIP_DIRS = new Set([
-  '.venv',
-  'venv',
-  'node_modules',
-  '__pycache__',
-  '.git',
-  '.mypy_cache',
-  '.pytest_cache',
-  '.ruff_cache',
-  '.tox',
-  '.crawl4ai',
-  'dist',
-  'build',
-  '.next',
-  'coverage',
-  '.turbo',
-  '.idea',
-  '.vscode',
-]);
-
-const PROJECT_EXPORT_SKIP_FILES = new Set(['.DS_Store', 'Thumbs.db']);
-
-function shouldSkipExportEntry(name, isDirectory) {
-  if (!name) return true;
-  if (PROJECT_EXPORT_SKIP_FILES.has(name)) return true;
-  if (isDirectory && PROJECT_EXPORT_SKIP_DIRS.has(name)) return true;
-  if (name.endsWith('.pyc') || name.endsWith('.pyo')) return true;
-  if (name.endsWith('.log')) return true;
-  return false;
 }
 
 function copyProjectTreeFiltered(srcDir, destDir) {
@@ -3283,21 +3122,6 @@ function resolveExtractedProjectRoot(extractDir) {
     if (looksLikeProjectRoot(candidate)) return candidate;
   }
   throw new Error('W archiwum nie znaleziono projektu Exitly (brak docker-compose / CLI meta)');
-}
-
-function uniqueProjectDir(parent, preferredName) {
-  const base = slugifyName(preferredName);
-  let dir = path.join(parent, base);
-  if (!fs.existsSync(dir)) return dir;
-  for (let i = 2; i < 1000; i += 1) {
-    dir = path.join(parent, `${base}-${i}`);
-    if (!fs.existsSync(dir)) return dir;
-  }
-  throw new Error('Nie udało się znaleźć wolnej nazwy folderu');
-}
-
-function powershellQuote(value) {
-  return `'${String(value).replace(/'/g, "''")}'`;
 }
 
 async function zipDirectory(folderPath, zipPath, { onLog } = {}) {
@@ -3431,66 +3255,64 @@ async function duplicateProject(
   if (!source || source.kind !== 'project') {
     throw new Error('Duplikacja tylko dla projektów');
   }
-  const src = path.resolve(source.path || '');
-  if (!src || !fs.existsSync(src) || !fs.statSync(src).isDirectory()) {
-    throw new Error(`Brak folderu projektu: ${src}`);
+  const srcPath = path.resolve(source.path || '');
+  if (!srcPath || !fs.existsSync(srcPath) || !fs.statSync(srcPath).isDirectory()) {
+    throw new Error(`Brak folderu projektu: ${srcPath}`);
   }
 
-  const cleanName = String(name || '')
-    .trim()
-    .slice(0, 60);
-  if (!cleanName) throw new Error('Podaj nazwę projektu');
-
-  const folderRaw = String(folderName || '').trim();
-  const folder = slugifyName(folderRaw || cleanName);
-  if (!folder) throw new Error('Podaj nazwę folderu');
-
-  const parent = path.resolve(
-    String(parentDir || '').trim() || path.dirname(src),
-  );
-  if (!parent || !fs.existsSync(parent) || !fs.statSync(parent).isDirectory()) {
-    throw new Error('Wybierz istniejący folder nadrzędny');
-  }
-
-  const projectDir = path.join(parent, folder);
+  const { cleanName, folder, projectDir } = resolveTargetProjectDir({
+    name,
+    folderName,
+    parentDir,
+    sourcePath: srcPath,
+  });
   if (fs.existsSync(projectDir)) {
     throw new Error(`Folder już istnieje: ${projectDir}`);
   }
-  if (path.resolve(projectDir) === src) {
+  if (path.resolve(projectDir) === srcPath) {
     throw new Error('Folder docelowy nie może być taki sam jak źródło');
   }
 
   if (onLog) {
     onLog(`Duplikuję ${source.name} → ${cleanName} (${projectDir})`);
   }
-  copyProjectTreeFiltered(src, projectDir);
+  copyProjectTreeFiltered(srcPath, projectDir);
 
-  const crawler = await registerProject(
-    {
-      projectPath: projectDir,
-      name: cleanName,
-      country: source.country || source.exit,
-      crawlModel: source.crawlModel,
-      antibotModel: source.antibotModel,
-      workers: source.workers,
-      rewriteContainers: true,
-    },
-    { onLog },
-  );
+  try {
+    const crawler = await registerProject(
+      {
+        projectPath: projectDir,
+        name: cleanName,
+        folderSlug: folder,
+        country: source.country || source.exit,
+        crawlModel: source.crawlModel,
+        antibotModel: source.antibotModel,
+        workers: source.workers,
+        rewriteContainers: true,
+      },
+      { onLog },
+    );
 
-  if (openCursor) {
-    try {
-      await openInCursor(projectDir, { onLog });
-    } catch (err) {
-      if (onLog) onLog(`Nie udało się otworzyć Cursor: ${err.message || err}`);
+    if (openCursor) {
+      try {
+        await openInCursor(projectDir, { onLog });
+      } catch (err) {
+        if (onLog) onLog(`Nie udało się otworzyć Cursor: ${err.message || err}`);
+      }
     }
+    return crawler;
+  } catch (err) {
+    try {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    } catch {
+      /* best-effort rollback */
+    }
+    throw err;
   }
-
-  return crawler;
 }
 
 async function registerProject(
-  { projectPath, name, country, exit, crawlModel, antibotModel, workers, rewriteContainers = false },
+  { projectPath, name, country, exit, crawlModel, antibotModel, workers, folderSlug, rewriteContainers = false },
   { onLog } = {},
 ) {
   const dir = path.resolve(String(projectPath || '').trim());
@@ -3512,9 +3334,8 @@ async function registerProject(
 
   const id = newCrawlerId();
   const chosen = resolveProjectCountry(country || exit || meta?.country || readActive(), 'ro');
-  const slug = slugifyName(cleanName);
-  const vpnContainerName = `exitly-vpn-${slug}-${id.slice(-4)}`;
-  const containerName = `exitly-proj-${slug}-${id.slice(-4)}`;
+  const slug = slugifyName(folderSlug || folderName || cleanName);
+  const { vpnContainerName, containerName } = containerNamesForSlug(slug, id);
 
   if (runMode === 'cli') {
     const cli = detectCliSpec(dir);
@@ -4936,65 +4757,6 @@ async function getSnapshot(onLog) {
   };
 }
 
-module.exports = {
-  getHubRoot,
-  getResourcesHub,
-  ensureWorkspace,
-  readCountries,
-  envNeedsSetup,
-  setupEnv,
-  runVpn,
-  getSnapshot,
-  fetchIpInfo,
-  fetchContainerIpInfo,
-  checkProjectIp,
-  readEndpoints,
-  setEndpoints,
-  getOllamaSettings,
-  setOllamaSettings,
-  checkOllama,
-  getSerperSettings,
-  setSerperSettings,
-  checkSerper,
-  getHostWgSettings,
-  setHostWgSettings,
-  setProjectUseHostWg,
-  ensureHostWgUp,
-  syncAppHostWg,
-  startHostWgWatchdog,
-  stopHostWgWatchdog,
-  probeProjectMcp,
-  ensureProjectCrmAccess,
-  ensureCliVpnTunnel,
-  writeCliVpnStack,
-  setProjectCliShell,
-  listAvailableCliShells,
-  CLI_SHELL_PRESETS,
-  ENDPOINT_PRESETS,
-  CRAWLER_EXITS,
-  listCrawlersWithStatus,
-  addCrawler,
-  removeCrawler,
-  startCrawler,
-  stopCrawler,
-  createProject,
-  registerProject,
-  duplicateProject,
-  exportProject,
-  importProject,
-  setCrawlerExit,
-  setProjectModels,
-  setProjectStartOptions,
-  getProjectEnv,
-  setProjectEnv,
-  openInCursor,
-  getProjectLogs,
-  followProjectLogs,
-  stopProjectLogFollow,
-  stopAllProjectLogFollows,
-  stopAllCliSessions,
-};
-
 function stopAllCliSessions() {
   for (const id of [...cliSessions.keys()]) {
     stopCliSession(id).catch(() => {});
@@ -5156,3 +4918,66 @@ function followProjectLogs(id, { onLine, tail = 100 } = {}) {
   });
   return true;
 }
+
+const hubApi = {
+  getHubRoot,
+  getResourcesHub,
+  ensureWorkspace,
+  readCountries,
+  envNeedsSetup,
+  setupEnv,
+  runVpn,
+  getSnapshot,
+  fetchIpInfo,
+  fetchContainerIpInfo,
+  checkProjectIp,
+  readEndpoints,
+  setEndpoints,
+  getOllamaSettings,
+  setOllamaSettings,
+  checkOllama,
+  getSerperSettings,
+  setSerperSettings,
+  checkSerper,
+  getHostWgSettings,
+  setHostWgSettings,
+  setProjectUseHostWg,
+  ensureHostWgUp,
+  syncAppHostWg,
+  startHostWgWatchdog,
+  stopHostWgWatchdog,
+  probeProjectMcp,
+  ensureProjectCrmAccess,
+  ensureCliVpnTunnel,
+  writeCliVpnStack,
+  setProjectCliShell,
+  listAvailableCliShells,
+  CLI_SHELL_PRESETS,
+  ENDPOINT_PRESETS,
+  CRAWLER_EXITS,
+  listCrawlersWithStatus,
+  addCrawler,
+  removeCrawler,
+  startCrawler,
+  stopCrawler,
+  createProject,
+  registerProject,
+  duplicateProject,
+  exportProject,
+  importProject,
+  setCrawlerExit,
+  setProjectModels,
+  setProjectStartOptions,
+  getProjectEnv,
+  setProjectEnv,
+  openInCursor,
+  getProjectLogs,
+  followProjectLogs,
+  stopProjectLogFollow,
+  stopAllProjectLogFollows,
+  stopAllCliSessions,
+};
+
+export default hubApi;
+module.exports = hubApi;
+

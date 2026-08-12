@@ -19,11 +19,11 @@ Without them, macOS builds still upload; users may need right-click → Open the
 ## Cut a release
 
 ```bash
-git tag v1.0.1
-git push origin v1.0.1
+git tag v1.0.3
+git push origin v1.0.3
 ```
 
-GitHub Actions (`.github/workflows/release.yml`) builds:
+GitHub Actions builds TypeScript (`pnpm build`) then:
 
 | OS | Artifacts |
 |----|-----------|
@@ -38,6 +38,7 @@ Assets attach to the GitHub Release. The in-app updater reads `latest.yml` / `la
 ```bash
 cd desktop
 pnpm install --frozen-lockfile
+pnpm build
 pnpm dist:mac     # or dist:win / dist:linux / dist
 ```
 

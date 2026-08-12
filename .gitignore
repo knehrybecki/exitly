@@ -13,6 +13,8 @@ secrets/*
 desktop/node_modules/
 desktop/dist/
 desktop/out/
+desktop/lib/
+desktop/*.tsbuildinfo
 *.blockmap
 .tmp-proj-test/
 
@@ -21,3 +23,4 @@ desktop/out/
 .idea/
 .vscode/
 *.swp
+.pnpm-store/

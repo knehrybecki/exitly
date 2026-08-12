@@ -47,6 +47,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build TypeScript
+        run: pnpm build
+
       # Secrets expand to "" when missing; electron-builder treats empty CSC_LINK
       # as a cert path (cwd) and fails with "…/desktop not a file".
       - name: Build and upload GitHub Release assets

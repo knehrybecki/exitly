@@ -4,15 +4,15 @@
   <img src="brand/logo-banner.png" alt="Exitly" width="720" />
 </p>
 
-**ProtonVPN country exits for every Docker project.** One WireGuard key, easy switching, optional parallel exits — desktop app or CLI.
+**ProtonVPN country exits for every Docker / CLI project.** One WireGuard key, per-project countries, desktop app or CLI.
 
-Built on [Gluetun](https://github.com/qdm12/gluetun). Apps attach with `network_mode: "container:proton-vpn"` — no Proton Desktop in each project.
+Built on [Gluetun](https://github.com/qdm12/gluetun).
 
 ## Why Exitly?
 
 - Side projects need VPN exits in **different countries**
 - Installing Proton GUI/CLI per VM does not scale
-- One shared quay (hub): switch country once, reuse from any compose stack
+- One hub + projects: each stack gets its own exit, models, env, and logs
 
 ## Requirements
 
@@ -20,17 +20,18 @@ Built on [Gluetun](https://github.com/qdm12/gluetun). Apps attach with `network_
 - ProtonVPN account (WireGuard)
 - `/dev/net/tun` (Linux, OrbStack, Docker Desktop)
 
-## Quick start (Desktop — recommended)
+## Install (Desktop — recommended)
 
-### Install from a release
+Download from [GitHub Releases](https://github.com/knehrybecki/exitly/releases):
 
-Download for your OS from GitHub **Releases**:
+| Platform | File |
+|----------|------|
+| macOS Apple Silicon | `Exitly-*-mac-arm64.dmg` |
+| macOS Intel | `Exitly-*-mac-x64.dmg` |
+| Windows | `Exitly-*-win-x64.exe` |
+| Linux | `Exitly-*-linux-x86_64.AppImage` or `.deb` |
 
-- macOS → `.dmg`
-- Windows → `.exe` (NSIS)
-- Linux → `.AppImage` or `.deb`
-
-The app auto-updates from the in-app banner.
+The packaged app auto-updates from the in-app banner. On unsigned macOS builds: right-click → Open the first time.
 
 ### Run from source
 
@@ -38,13 +39,18 @@ The app auto-updates from the in-app banner.
 git clone https://github.com/knehrybecki/exitly.git
 cd exitly/desktop
 pnpm install
+pnpm build
 pnpm start
 ```
 
+Optional: `pnpm test`
+
 1. Paste Proton WireGuard **PrivateKey**  
    ([Proton WireGuard configs](https://account.proton.me/u/0/vpn/WireGuard))
-2. Choose a country → **Connect**
-3. Use **Connect any app** to copy Docker / proxy snippets
+2. Create or open a **project** (Docker compose or CLI)
+3. Pick country / models / CRM LAN on the project card → **Włącz** / **Uruchom**
+
+Projects support **Import / Export (.zip)** and **Duplikuj** (new name + folder).
 
 Build & publish: [`RELEASE.md`](RELEASE.md) · [`desktop/README.md`](desktop/README.md)
 
@@ -69,9 +75,11 @@ cd exitly
 ln -sf "$(pwd)/bin/vpn" ~/.local/bin/vpn
 ```
 
-## Connect any app
+## Attach apps to an exit
 
 ### Option A — Docker `network_mode` (best)
+
+Per-project tunnels use dedicated container names (`exitly-vpn-…`). Shared hub exit:
 
 ```yaml
 services:
@@ -80,7 +88,7 @@ services:
     network_mode: "container:proton-vpn"
 ```
 
-Country switches in Exitly do **not** require changing the project. See [`snippets/docker-compose.app.yml`](snippets/docker-compose.app.yml).
+See [`snippets/docker-compose.app.yml`](snippets/docker-compose.app.yml).
 
 ### Option B — HTTP proxy
 
@@ -92,7 +100,7 @@ export NO_PROXY=localhost,127.0.0.1
 
 From another container: `http://host.docker.internal:8888`.
 
-### Option C — Parallel countries
+### Option C — Parallel countries (CLI)
 
 ```bash
 ./bin/vpn up ro hu
@@ -104,22 +112,6 @@ network_mode: "container:vpn-ro"
 # project B
 network_mode: "container:vpn-hu"
 ```
-
-### Option D — Ollama (or any published app port)
-
-Apps that use `network_mode: "container:proton-vpn"` must publish ports on the
-**hub** container, not on the app. In the desktop app: **Connect any app → Endpoints → Add Ollama** (port `11434`), then:
-
-```yaml
-services:
-  ollama:
-    image: ollama/ollama
-    network_mode: "container:proton-vpn"
-    volumes:
-      - ollama:/root/.ollama
-```
-
-See [`snippets/docker-compose.ollama.yml`](snippets/docker-compose.ollama.yml). Clients use `http://127.0.0.1:11434`.
 
 ## CLI
 
