@@ -1,10 +1,10 @@
 # Releases & auto-update
 
-Exitquay Desktop ships installers for **macOS**, **Windows**, and **Linux**, and updates itself from **GitHub Releases** via `electron-updater`.
+Exitly Desktop ships installers for **macOS**, **Windows**, and **Linux**, and updates itself from **GitHub Releases** via `electron-updater`.
 
 ## One-time publish setup
 
-1. Create the GitHub repo `exitquay` and push this project.
+1. Create the GitHub repo `exitly` and push this project.
 2. Replace `YOUR_GITHUB_USER` in:
    - `desktop/package.json` → `homepage`, `repository.url`, `build.publish[0].owner`
 3. Commit and push.

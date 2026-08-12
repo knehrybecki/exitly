@@ -1,6 +1,6 @@
-# Exitquay Desktop
+# Exitly Desktop
 
-Cross-platform Electron app for Exitquay.
+Cross-platform Electron app for Exitly.
 
 | Platform | Installer |
 |----------|-----------|

@@ -1,14 +1,14 @@
-# Exitquay
+# Exitly
 
 <p align="center">
-  <img src="brand/logo-banner.png" alt="Exitquay" width="720" />
+  <img src="brand/logo-banner.png" alt="Exitly" width="720" />
 </p>
 
 **ProtonVPN country exits for every Docker project.** One WireGuard key, easy switching, optional parallel exits — desktop app or CLI.
 
 Built on [Gluetun](https://github.com/qdm12/gluetun). Apps attach with `network_mode: "container:proton-vpn"` — no Proton Desktop in each project.
 
-## Why Exitquay?
+## Why Exitly?
 
 - Side projects need VPN exits in **different countries**
 - Installing Proton GUI/CLI per VM does not scale
@@ -35,8 +35,8 @@ The app auto-updates from the in-app banner.
 ### Run from source
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USER/exitquay.git
-cd exitquay/desktop
+git clone https://github.com/YOUR_GITHUB_USER/exitly.git
+cd exitly/desktop
 npm install
 npm start
 ```
@@ -51,8 +51,8 @@ Build & publish: [`RELEASE.md`](RELEASE.md) · [`desktop/README.md`](desktop/REA
 ## Quick start (CLI)
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USER/exitquay.git
-cd exitquay
+git clone https://github.com/YOUR_GITHUB_USER/exitly.git
+cd exitly
 ./bin/vpn setup
 ```
 
@@ -80,7 +80,7 @@ services:
     network_mode: "container:proton-vpn"
 ```
 
-Country switches in Exitquay do **not** require changing the project. See [`snippets/docker-compose.app.yml`](snippets/docker-compose.app.yml).
+Country switches in Exitly do **not** require changing the project. See [`snippets/docker-compose.app.yml`](snippets/docker-compose.app.yml).
 
 ### Option B — HTTP proxy
 
@@ -127,7 +127,7 @@ network_mode: "container:vpn-hu"
 
 - Never commit `.env` or WireGuard keys
 - Prefer `network_mode: container:…` to avoid leaks
-- Exitquay is not a full OS sandbox — mount only what you need
+- Exitly is not a full OS sandbox — mount only what you need
 
 ## Credits
 

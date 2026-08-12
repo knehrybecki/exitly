@@ -1,15 +1,15 @@
 {
-  "name": "exitquay",
-  "productName": "Exitquay",
+  "name": "exitly",
+  "productName": "Exitly",
   "version": "1.0.0",
-  "description": "Exitquay — ProtonVPN country exits for any Docker project",
+  "description": "Exitly — ProtonVPN country exits for any Docker project",
   "main": "main.js",
-  "author": "Exitquay contributors",
+  "author": "Exitly contributors",
   "license": "MIT",
-  "homepage": "https://github.com/YOUR_GITHUB_USER/exitquay",
+  "homepage": "https://github.com/YOUR_GITHUB_USER/exitly",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_GITHUB_USER/exitquay.git"
+    "url": "https://github.com/YOUR_GITHUB_USER/exitly.git"
   },
   "private": true,
   "scripts": {
@@ -34,9 +34,9 @@
     "electron-builder": "^26.0.12"
   },
   "build": {
-    "appId": "app.exitquay.desktop",
-    "productName": "Exitquay",
-    "copyright": "Copyright © Exitquay contributors",
+    "appId": "app.exitly.desktop",
+    "productName": "Exitly",
+    "copyright": "Copyright © Exitly contributors",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -75,7 +75,7 @@
       {
         "provider": "github",
         "owner": "YOUR_GITHUB_USER",
-        "repo": "exitquay",
+        "repo": "exitly",
         "releaseType": "release"
       }
     ],
@@ -116,7 +116,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Exitquay",
+      "shortcutName": "Exitly",
       "deleteAppDataOnUninstall": false
     },
     "linux": {
@@ -127,7 +127,7 @@
       "category": "Network",
       "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
       "synopsis": "ProtonVPN exit switcher for Docker projects",
-      "description": "Exitquay switches ProtonVPN exit countries and lets any Docker app attach to the shared tunnel."
+      "description": "Exitly switches ProtonVPN exit countries and lets any Docker app attach to the shared tunnel."
     },
     "appImage": {
       "license": "../LICENSE"

@@ -1,4 +1,4 @@
-# Contributing to Exitquay
+# Contributing to Exitly
 
 Issues and PRs welcome.
 
