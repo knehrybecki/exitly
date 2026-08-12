@@ -50,6 +50,7 @@ jobs:
       # Secrets expand to "" when missing; electron-builder treats empty CSC_LINK
       # as a cert path (cwd) and fails with "…/desktop not a file".
       - name: Build and upload GitHub Release assets
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK_RAW: ${{ secrets.CSC_LINK }}
