@@ -86,6 +86,7 @@ jobs:
           APPLE_TEAM_ID_RAW: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
+          EXTRA_EB_ARGS=()
           if [ -n "${CSC_LINK_RAW:-}" ]; then
             export CSC_LINK="$CSC_LINK_RAW"
             export CSC_KEY_PASSWORD="${CSC_KEY_PASSWORD_RAW:-}"
@@ -93,7 +94,9 @@ jobs:
           else
             export CSC_IDENTITY_AUTO_DISCOVERY=false
             if [[ "${{ matrix.os }}" == macos-* ]]; then
-              echo "::warning::CSC_LINK missing — macOS build will be UNSIGNED (Gatekeeper 'damaged' dialog)."
+              # Avoid broken ad-hoc signatures that ShipIt rejects ("no resources").
+              EXTRA_EB_ARGS+=(--config.mac.identity=null)
+              echo "::warning::CSC_LINK missing — macOS build forced UNSIGNED (identity=null)."
             fi
           fi
           if [ -n "${APPLE_ID_RAW:-}" ]; then
@@ -104,4 +107,4 @@ jobs:
           elif [[ "${{ matrix.os }}" == macos-* ]] && [ -n "${CSC_LINK_RAW:-}" ]; then
             echo "::warning::APPLE_ID missing — signed but not notarized; Gatekeeper may still block downloads."
           fi
-          pnpm exec electron-builder ${{ matrix.args }} --publish always
+          pnpm exec electron-builder ${{ matrix.args }} "${EXTRA_EB_ARGS[@]}" --publish always
