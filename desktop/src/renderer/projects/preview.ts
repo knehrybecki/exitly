@@ -1,4 +1,4 @@
-/** Logo-inspired radar preview driven by project log lines. */
+/** Crawl-graph preview driven by project log lines. */
 
 export type PreviewKind =
   | "idle"
@@ -103,9 +103,31 @@ function svgId(projectId: string, name: string): string {
   return `pv-${safe}-${name}`;
 }
 
+const CRAWL_PATH =
+  "M48 54 C70 40 96 30 120 28 C150 36 178 46 200 50 C220 36 234 24 248 22 C280 28 310 36 332 40 C348 52 356 68 360 78 C330 82 290 76 268 72 C240 80 210 86 186 88 C156 84 138 80 128 78 C88 72 62 64 48 54";
+
+const CRAWL_NODES: Array<{ x: number; y: number; seed?: boolean }> = [
+  { x: 48, y: 54, seed: true },
+  { x: 120, y: 28 },
+  { x: 128, y: 78 },
+  { x: 200, y: 50 },
+  { x: 248, y: 22 },
+  { x: 268, y: 72 },
+  { x: 186, y: 88 },
+  { x: 332, y: 40 },
+  { x: 360, y: 78 },
+];
+
+function pageNode(x: number, y: number, seed = false): string {
+  const extra = seed ? " seed" : "";
+  return `<g class="preview-node${extra}" transform="translate(${x} ${y})">
+    <rect x="-7" y="-9" width="14" height="17" rx="2"/>
+    <path d="M-3.5 -4 h7 M-3.5 0 h7 M-3.5 4 h4.5"/>
+  </g>`;
+}
+
 export function renderPreviewHtml(projectId: string, running: boolean): string {
-  const g = svgId(projectId, "g");
-  const sweep = svgId(projectId, "s");
+  const glow = svgId(projectId, "g");
   const state = getPreviewState(projectId);
   state.running = running;
   const kind = running ? state.kind || "boot" : "idle";
@@ -116,48 +138,37 @@ export function renderPreviewHtml(projectId: string, running: boolean): string {
     }" data-kind="${kind}">
       <svg class="preview-scene" viewBox="0 0 400 108" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
         <defs>
-          <radialGradient id="${g}" cx="50%" cy="58%" r="55%">
-            <stop offset="0" stop-color="#b6e34a" stop-opacity="0.28"/>
+          <radialGradient id="${glow}" cx="30%" cy="50%" r="70%">
+            <stop offset="0" stop-color="#b6e34a" stop-opacity="0.16"/>
             <stop offset="1" stop-color="#064644" stop-opacity="0"/>
           </radialGradient>
-          <linearGradient id="${sweep}" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stop-color="#39ff88" stop-opacity="0"/>
-            <stop offset="0.72" stop-color="#39ff88" stop-opacity="0.08"/>
-            <stop offset="1" stop-color="#b6e34a" stop-opacity="0.55"/>
-          </linearGradient>
         </defs>
         <rect width="400" height="108" fill="#02140f"/>
-        <rect width="400" height="108" fill="url(#${g})"/>
-        <g class="preview-grid" stroke="#39ff88" stroke-opacity="0.12" fill="none">
-          <path d="M0 86 H400 M0 94 H400 M0 102 H400"/>
-          <path d="M40 70 V108 M80 62 V108 M120 70 V108 M160 58 V108 M200 52 V108 M240 58 V108 M280 70 V108 M320 62 V108 M360 74 V108"/>
+        <rect width="400" height="108" fill="url(#${glow})"/>
+        <g class="preview-web" fill="none" stroke="#39ff88">
+          <path class="preview-link" d="M48 54 L120 28 L200 50 L248 22 L332 40 L360 78"/>
+          <path class="preview-link alt" d="M48 54 L128 78 L186 88 L268 72 L360 78"/>
+          <path class="preview-link" d="M120 28 L128 78 M200 50 L268 72 M248 22 L200 50 L186 88"/>
+          <path class="preview-route" d="${CRAWL_PATH}"/>
         </g>
-        <g class="preview-city" fill="#011a19" stroke="#0a6b5f" stroke-width="1">
-          <path d="M18 108 V78 h10 V108 M36 108 V64 h14 V108 M58 108 V84 h8 V108"/>
-          <path d="M318 108 V80 h12 V108 M338 108 V68 h16 V108 M362 108 V88 h10 V108"/>
-          <path d="M168 108 L188 58 H212 L232 108 Z"/>
-          <rect x="178" y="72" width="4" height="12" rx="1"/>
-          <rect x="218" y="72" width="4" height="12" rx="1"/>
-          <rect x="172" y="88" width="6" height="20" rx="1"/>
-          <rect x="222" y="88" width="6" height="20" rx="1"/>
+        ${CRAWL_NODES.map((n) => pageNode(n.x, n.y, n.seed)).join("")}
+        <circle class="preview-fetch" r="2.4" fill="#b6e34a"/>
+        <circle class="preview-fetch delay" r="1.8" fill="#9dffc2"/>
+        <g class="preview-spider">
+          <path class="leg a" d="M0 0 L-9 -7"/>
+          <path class="leg b" d="M0 0 L-10 -1"/>
+          <path class="leg a" d="M0 0 L-9 6"/>
+          <path class="leg b" d="M0 0 L-7 8"/>
+          <path class="leg a" d="M0 0 L9 -7"/>
+          <path class="leg b" d="M0 0 L10 -1"/>
+          <path class="leg a" d="M0 0 L9 6"/>
+          <path class="leg b" d="M0 0 L7 8"/>
+          <ellipse class="abdomen" cx="-3.2" cy="1.2" rx="5.2" ry="3.4"/>
+          <circle class="cephalon" cx="3.4" cy="-0.4" r="3.1"/>
         </g>
-        <g class="preview-arcs" fill="none" stroke="#b6e34a" stroke-linecap="round">
-          <path d="M200 62 m-28 0 a28 16 0 0 1 56 0" stroke-width="1.6" opacity="0.95"/>
-          <path d="M200 62 m-52 0 a52 28 0 0 1 104 0" stroke-width="1.35" opacity="0.7"/>
-          <path d="M200 62 m-78 0 a78 40 0 0 1 156 0" stroke-width="1.15" opacity="0.45"/>
-          <path d="M200 62 m-108 0 a108 52 0 0 1 216 0" stroke-width="1" opacity="0.28"/>
-        </g>
-        <g class="preview-sweep" style="transform-origin: 200px 62px">
-          <path d="M200 62 L308 18" stroke="url(#${sweep})" stroke-width="18" stroke-linecap="round"/>
-          <path d="M200 62 L312 16" stroke="#b6e34a" stroke-width="1.4" stroke-opacity="0.9"/>
-        </g>
-        <circle class="preview-core" cx="200" cy="62" r="5" fill="#b6e34a"/>
-        <circle class="preview-core-ring" cx="200" cy="62" r="9" fill="none" stroke="#b6e34a" stroke-width="1.2"/>
-        <circle class="preview-packet" cx="92" cy="62" r="2.2" fill="#b6e34a"/>
-        <circle class="preview-packet delay" cx="148" cy="62" r="1.8" fill="#9dffc2"/>
       </svg>
       <div class="preview-pings" data-role="preview-pings"></div>
-      <div class="preview-live"><span></span> live</div>
+      <div class="preview-live"><span></span> crawl</div>
       <div class="preview-stream" data-role="preview-stream">${stream}</div>
     </div>`;
 }
@@ -202,15 +213,23 @@ export function applyPreviewToCard(
 }
 
 function spawnPreviewPing(card: ParentNode, kind: PreviewKind): void {
-  const layer = card.querySelector('[data-role="preview-pings"]');
-  if (!layer) return;
-  const ping = document.createElement("span");
-  ping.className = `preview-ping kind-${kind}`;
-  ping.style.left = `${10 + Math.random() * 80}%`;
-  ping.style.top = `${12 + Math.random() * 52}%`;
-  layer.appendChild(ping);
-  ping.addEventListener("animationend", () => ping.remove());
-  while (layer.children.length > 12) layer.firstElementChild?.remove();
+  const nodes = card.querySelectorAll(".preview-node");
+  if (!nodes.length) return;
+  const node = nodes[Math.floor(Math.random() * nodes.length)];
+  node.classList.remove("hot", "kind-error", "kind-warn", "kind-vpn");
+  const extra =
+    kind === "error" || kind === "warn"
+      ? `kind-${kind}`
+      : kind === "vpn" || kind === "mcp"
+        ? "kind-vpn"
+        : "";
+  requestAnimationFrame(() => {
+    node.classList.add("hot");
+    if (extra) node.classList.add(extra);
+  });
+  window.setTimeout(() => {
+    node.classList.remove("hot", "kind-error", "kind-warn", "kind-vpn");
+  }, 720);
 }
 
 function maybePing(id: string, kind: PreviewKind): void {

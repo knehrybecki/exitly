@@ -10,6 +10,7 @@ import os from "os";
 import path from "path";
 import type { UpdateStatusPayload } from "./shared/ipc";
 import { Ipc } from "./shared/ipc";
+import { friendlyUpdateError } from "./updater-error";
 
 let started = false;
 let autoUpdater: typeof import("electron-updater").autoUpdater | null = null;
@@ -24,6 +25,8 @@ function getAutoUpdater() {
     autoUpdater.autoInstallOnAppQuit = process.platform !== "darwin";
     autoUpdater.disableDifferentialDownload = true;
     autoUpdater.requestHeaders = {
+      "User-Agent": `Exitly/${app.getVersion()} (${process.platform})`,
+      Accept: "application/octet-stream, text/yaml, text/plain; q=0.9, */*; q=0.1",
       "Cache-Control":
         "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
     };
@@ -35,20 +38,6 @@ function send(win: BW | null, channel: string, payload: UpdateStatusPayload) {
   if (win && !win.isDestroyed()) {
     win.webContents.send(channel, payload);
   }
-}
-
-function friendlyUpdateError(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err || "unknown");
-  if (/Code signature|podpis|did not pass validation|zasobów/i.test(raw)) {
-    return "Podpis aktualizacji odrzucony (unsigned build). Pobierz nową wersję ręcznie z GitHub Releases.";
-  }
-  if (/ERR_HTTP2|HTTP2|REFUSED_STREAM|PROTOCOL_ERROR/i.test(raw)) {
-    return "GitHub odmówił połączenia HTTP/2. Spróbuj ponownie za chwilę albo pobierz release ręcznie.";
-  }
-  if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|net::ERR_/i.test(raw)) {
-    return `Brak połączenia z serwerem aktualizacji (${raw}).`;
-  }
-  return raw;
 }
 
 function rememberDownloadedZip(): void {
