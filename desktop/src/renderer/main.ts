@@ -13,6 +13,7 @@ import {
 import { slugifyFolderName, parentDirOf } from "./modals/helpers";
 import {
   applyPreviewToCard,
+  bindPreviewMotion,
   dropPreviewState,
   ingestPreviewLine,
   renderPreviewHtml,
@@ -1475,10 +1476,7 @@ api().onProjectLog((payload) => {
   if (!payload?.id || !payload.line) return;
   const running = isProjectRunning(payload.id);
   const backfill = Date.now() < (previewBackfillUntil.get(payload.id) || 0);
-  ingestPreviewLine(payload.id, payload.line, {
-    running,
-    ping: !backfill && running,
-  });
+  ingestPreviewLine(payload.id, payload.line, { running });
   if (payload.id === selectedProjectId && !backfill) {
     appendProjectLog(payload.line);
   }
@@ -1567,6 +1565,7 @@ el.btnUpdateInstall.addEventListener("click", () => {
 });
 
 api().onUpdateStatus(handleUpdateStatus);
+bindPreviewMotion();
 
 (async () => {
   try {
