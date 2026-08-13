@@ -55,7 +55,9 @@ export type VpnHubApi = {
   installUpdate: () => Promise<unknown>;
   onLog: (cb: (line: string) => void) => () => void;
   onProjectLog: (cb: (payload: { id: string; line: string }) => void) => () => void;
-  onUpdateStatus: (cb: (payload: import("./types").UpdateStatusPayload) => void) => () => void;
+  onUpdateStatus: (
+    cb: (payload: import("./types").UpdateStatusPayload) => void,
+  ) => () => void;
 };
 
 declare global {
@@ -67,9 +69,7 @@ declare global {
 export function api(): VpnHubApi {
   const hub = window.vpnHub;
   if (!hub) {
-    throw new Error(
-      "vpnHub niedostępne — preload nie załadował się (sandbox / build).",
-    );
+    throw new Error("vpnHub niedostępne — preload nie załadował się (sandbox / build).");
   }
   return hub;
 }

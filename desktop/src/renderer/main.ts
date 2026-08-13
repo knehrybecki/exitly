@@ -11,6 +11,13 @@ import {
   isBusy,
 } from "./ui";
 import { slugifyFolderName, parentDirOf } from "./modals/helpers";
+import {
+  applyPreviewToCard,
+  dropPreviewState,
+  ingestPreviewLine,
+  renderPreviewHtml,
+  seedPreviewLines,
+} from "./projects/preview";
 import type {
   Country,
   HostWgConfig,
@@ -124,6 +131,9 @@ let envEditProjectId: string | null = null;
 let dupSourceId: string | null = null;
 let dupFolderTouched = false;
 const projectIpCache = new Map<string, ProjectIpInfo>();
+const followedLogIds = new Set<string>();
+const previewBackfillUntil = new Map<string, number>();
+let lastProjectsRenderKey = "";
 
 function showView(name: "projects" | "settings"): void {
   view = name;
@@ -267,10 +277,7 @@ function renderHostWg(hostWg: HostWgConfig | null | undefined): void {
   }
   if (cfg.configured) {
     if (cfg.up) {
-      setHostWgStatus(
-        `Exitly trzyma tunel ${cfg.name || "wg0"} — CRM LAN OK`,
-        "ok",
-      );
+      setHostWgStatus(`Exitly trzyma tunel ${cfg.name || "wg0"} — CRM LAN OK`, "ok");
     } else if (cfg.managed) {
       setHostWgStatus(
         `Config OK · Exitly podniesie ${cfg.name || "wg0"} przy starcie`,
@@ -303,7 +310,10 @@ function fillCountrySelect(
   }
 }
 
-function countryFromExit(exit: string | undefined, snap: Snapshot | null | undefined): string {
+function countryFromExit(
+  exit: string | undefined,
+  snap: Snapshot | null | undefined,
+): string {
   if (!exit || exit === "proton-vpn") return snap?.active || "ro";
   const m = String(exit).match(/^vpn-([a-z]{2})$/i);
   if (m?.[1]) return m[1].toLowerCase();
@@ -325,9 +335,6 @@ function appendProjectLog(line: string): void {
 }
 
 async function attachProjectLogs(id: string): Promise<void> {
-  if (selectedProjectId && selectedProjectId !== id) {
-    await api().stopProjectLogs(selectedProjectId);
-  }
   selectedProjectId = id;
   projectLogBuffer = "";
   try {
@@ -340,7 +347,10 @@ async function attachProjectLogs(id: string): Promise<void> {
       pre.textContent = projectLogBuffer || "(brak logów)\n";
       pre.scrollTop = pre.scrollHeight;
     }
-    await api().followProjectLogs(id);
+    seedPreviewLines(id, projectLogBuffer, isProjectRunning(id));
+    const card = document.querySelector(`.project-card[data-id="${id}"]`);
+    if (card) applyPreviewToCard(card, id, isProjectRunning(id));
+    await ensureProjectLogFollow(id);
   } catch (err: unknown) {
     appendProjectLog(`(logi: ${errMsg(err)})`);
   }
@@ -348,20 +358,99 @@ async function attachProjectLogs(id: string): Promise<void> {
 
 async function detachProjectLogs(): Promise<void> {
   if (!selectedProjectId) return;
+  const id = selectedProjectId;
+  selectedProjectId = null;
+  projectLogBuffer = "";
+  if (!isProjectRunning(id)) {
+    await stopProjectLogFollow(id);
+  }
+}
+
+function isProjectRunning(id: string): boolean {
+  return !!(snapshot?.crawlers || []).find((c) => c.id === id)?.running;
+}
+
+async function ensureProjectLogFollow(id: string): Promise<void> {
+  if (followedLogIds.has(id)) return;
+  followedLogIds.add(id);
+  previewBackfillUntil.set(id, Date.now() + 1100);
   try {
-    await api().stopProjectLogs(selectedProjectId);
+    await api().followProjectLogs(id);
+  } catch {
+    followedLogIds.delete(id);
+  }
+}
+
+async function stopProjectLogFollow(id: string): Promise<void> {
+  if (!followedLogIds.has(id)) return;
+  followedLogIds.delete(id);
+  previewBackfillUntil.delete(id);
+  try {
+    await api().stopProjectLogs(id);
   } catch {
     /* ignore */
   }
-  selectedProjectId = null;
-  projectLogBuffer = "";
+}
+
+async function syncProjectLogFollows(projects: ProjectItem[]): Promise<void> {
+  const wanted = new Set(
+    projects.filter((p) => p.running || p.id === selectedProjectId).map((p) => p.id),
+  );
+  for (const id of [...followedLogIds]) {
+    if (!wanted.has(id)) await stopProjectLogFollow(id);
+  }
+  for (const item of projects) {
+    if (!wanted.has(item.id) || followedLogIds.has(item.id)) continue;
+    try {
+      const res = await api().getProjectLogs(item.id);
+      const text = typeof res === "string" ? res : res?.text || "";
+      seedPreviewLines(item.id, text, !!item.running);
+      const card = document.querySelector(`.project-card[data-id="${item.id}"]`);
+      if (card) applyPreviewToCard(card, item.id, !!item.running);
+    } catch {
+      /* podgląd złapie kolejne linie na żywo */
+    }
+    await ensureProjectLogFollow(item.id);
+  }
+}
+
+function projectsRenderKey(projects: ProjectItem[]): string {
+  return projects
+    .map(
+      (p) =>
+        [
+          p.id,
+          p.running ? "1" : "0",
+          p.envReady === false ? "0" : "1",
+          p.country || p.exit || "",
+          p.crawlModel || "",
+          p.antibotModel || "",
+          p.workers || "",
+          p.cliCommand || "",
+          p.useHostWg ? "1" : "0",
+          (p.envMissing || []).join(","),
+          JSON.stringify(p.optionValues || {}),
+          (p.envFields || [])
+            .map((f) => `${f.key}:${f.value || ""}:${f.missing ? 1 : 0}`)
+            .join(","),
+          p.id === selectedProjectId ? "open" : "",
+        ].join(":"),
+    )
+    .join("|");
 }
 
 function renderProjects(snap: Snapshot): void {
   const projects = (snap.crawlers || []).filter((c) => c.kind === "project");
-  el.projectList.innerHTML = "";
+  const knownIds = new Set(projects.map((p) => p.id));
+  for (const id of [...followedLogIds]) {
+    if (!knownIds.has(id)) {
+      void stopProjectLogFollow(id);
+      dropPreviewState(id);
+    }
+  }
 
   if (!projects.length) {
+    lastProjectsRenderKey = "";
     el.projectList.innerHTML = `
       <div class="project-empty">
         <strong>Brak projektów</strong>
@@ -373,6 +462,14 @@ function renderProjects(snap: Snapshot): void {
   if (selectedProjectId && !projects.some((p) => p.id === selectedProjectId)) {
     void detachProjectLogs();
   }
+
+  const renderKey = projectsRenderKey(projects);
+  if (renderKey === lastProjectsRenderKey && el.projectList.querySelector(".project-card")) {
+    void syncProjectLogFollows(projects);
+    return;
+  }
+  lastProjectsRenderKey = renderKey;
+  el.projectList.innerHTML = "";
 
   for (const item of projects) {
     const running = !!item.running;
@@ -395,13 +492,12 @@ function renderProjects(snap: Snapshot): void {
       )
       .join("");
 
-    const crawlModel = item.crawlModel || snap.ollama?.defaults?.crawlModel || "qwen2.5:14b";
+    const crawlModel =
+      item.crawlModel || snap.ollama?.defaults?.crawlModel || "qwen2.5:14b";
     const antibotModel =
       item.antibotModel || snap.ollama?.defaults?.antibotModel || "captchamind:7b";
     const workers = Math.min(8, Math.max(1, Number(item.workers) || 1));
-    const cliLabel = item.cliCommand
-      ? pathBasename(item.cliCommand)
-      : "CLI";
+    const cliLabel = item.cliCommand ? pathBasename(item.cliCommand) : "CLI";
     const cliShells = Array.isArray(snap.cliShells) ? snap.cliShells : [];
     const currentCliBase = pathBasename(item.cliCommand || "opencode").replace(
       /\.(exe|cmd|bat)$/i,
@@ -539,6 +635,7 @@ function renderProjects(snap: Snapshot): void {
       .join("\n         ");
 
     card.innerHTML = `
+      ${renderPreviewHtml(item.id, running)}
       <div class="project-top">
         <div>
           <p class="project-name">${escapeHtml(item.name)} <span class="mode-tag">${
@@ -558,27 +655,13 @@ function renderProjects(snap: Snapshot): void {
         ${envInlineHtml}
         ${optionsHtml}
         <label class="check project-hostwg">
-          <input type="checkbox" data-role="host-wg" ${
-            item.useHostWg ? "checked" : ""
-          } />
-          ${
-            isCli
-              ? "CRM LAN (Docker)"
-              : "CRM LAN (Docker + VPN)"
-          }
+          <input type="checkbox" data-role="host-wg" ${item.useHostWg ? "checked" : ""} />
+          ${isCli ? "CRM LAN (Docker)" : "CRM LAN (Docker + VPN)"}
         </label>
         <div class="project-actions">
           ${extraActions}
           <button type="button" class="${running ? "danger" : "primary"}" data-role="toggle">
-            ${
-              running
-                ? isCli
-                  ? "Zatrzymaj"
-                  : "Wyłącz"
-                : isCli
-                  ? "Uruchom"
-                  : "Włącz"
-            }
+            ${running ? (isCli ? "Zatrzymaj" : "Wyłącz") : isCli ? "Uruchom" : "Włącz"}
           </button>
           <button type="button" class="ghost" data-role="logs">${open ? "Ukryj logi" : "Logi"}</button>
           <button type="button" class="ghost" data-role="cursor">Cursor</button>
@@ -649,7 +732,9 @@ function renderProjects(snap: Snapshot): void {
       });
     }
 
-    const crawlSelect = card.querySelector<HTMLSelectElement>('[data-role="crawl-model"]');
+    const crawlSelect = card.querySelector<HTMLSelectElement>(
+      '[data-role="crawl-model"]',
+    );
     const antibotSelect = card.querySelector<HTMLSelectElement>(
       '[data-role="antibot-model"]',
     );
@@ -840,14 +925,18 @@ function renderProjects(snap: Snapshot): void {
         withBusy(async () => {
           if (selectedProjectId === item.id) await detachProjectLogs();
           projectIpCache.delete(item.id);
+          dropPreviewState(item.id);
           log(`Usuwam ${item.name}`);
           return api().removeCrawler(item.id);
         });
       },
     );
 
+    applyPreviewToCard(card, item.id, running);
     el.projectList.appendChild(card);
   }
+
+  void syncProjectLogFollows(projects);
 }
 
 function pathBasename(p: unknown): string {
@@ -895,8 +984,9 @@ function renderStartOptionInput(opt: StartOption, value: unknown): string {
 
 function collectStartOptionValues(card: ParentNode): Record<string, string> {
   const values: Record<string, string> = {};
-  card.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-opt-id]").forEach(
-    (node) => {
+  card
+    .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-opt-id]")
+    .forEach((node) => {
       const id = node.getAttribute("data-opt-id");
       if (!id) return;
       if (node instanceof HTMLInputElement && node.type === "checkbox") {
@@ -904,8 +994,7 @@ function collectStartOptionValues(card: ParentNode): Record<string, string> {
       } else {
         values[id] = node.value || "";
       }
-    },
-  );
+    });
   return values;
 }
 
@@ -918,8 +1007,7 @@ function renderNewOptionRow(opt: Partial<StartOption> = {}): HTMLDivElement {
     <select data-f="type">
       ${["text", "number", "checkbox", "select"]
         .map(
-          (t) =>
-            `<option value="${t}" ${opt.type === t ? "selected" : ""}>${t}</option>`,
+          (t) => `<option value="${t}" ${opt.type === t ? "selected" : ""}>${t}</option>`,
         )
         .join("")}
     </select>
@@ -944,12 +1032,11 @@ function renderNewOptionRow(opt: Partial<StartOption> = {}): HTMLDivElement {
 
 function collectNewOptionsFromModal(): StartOption[] {
   if (!el.newOptionsList) return [];
-  return [...el.newOptionsList.querySelectorAll(".option-row")]
+  return Array.from(el.newOptionsList.querySelectorAll(".option-row"))
     .map((row) => {
       const get = (f: string): string => {
-        const node = row.querySelector<HTMLInputElement | HTMLSelectElement>(
-          `[data-f="${f}"]`,
-        );
+        const node = row.querySelector(`[data-f="${f}"]`) as
+          HTMLInputElement | HTMLSelectElement | null;
         return (node?.value || "").trim();
       };
       return {
@@ -1097,16 +1184,8 @@ function openNewModal(): void {
   fillCountrySelect(el.newCountry, snapshot?.countries, snapshot?.active || "ro");
   const defaults = snapshot?.ollama?.defaults || {};
   const models = snapshot?.ollama?.models || [];
-  fillModelSelect(
-    el.newCrawlModel,
-    defaults.crawlModel || "qwen2.5:14b",
-    models,
-  );
-  fillModelSelect(
-    el.newAntibotModel,
-    defaults.antibotModel || "captchamind:7b",
-    models,
-  );
+  fillModelSelect(el.newCrawlModel, defaults.crawlModel || "qwen2.5:14b", models);
+  fillModelSelect(el.newAntibotModel, defaults.antibotModel || "captchamind:7b", models);
   void refreshOllamaModelsForSelect(el.newCrawlModel);
   if (el.newOptionsList) {
     el.newOptionsList.innerHTML = "";
@@ -1288,6 +1367,7 @@ el.modalEnv.addEventListener("click", (e) => {
 });
 $("#btn-env-save").addEventListener("click", () => {
   if (!envEditProjectId) return;
+  const projectId = envEditProjectId;
   const values: Record<string, string> = {};
   el.envFields.querySelectorAll<HTMLInputElement>("[data-env-key]").forEach((input) => {
     const key = input.getAttribute("data-env-key");
@@ -1295,7 +1375,7 @@ $("#btn-env-save").addEventListener("click", () => {
   });
   withBusy(async () => {
     log("Zapisuję .env projektu");
-    const snap = await api().setProjectEnv(envEditProjectId, values);
+    const snap = await api().setProjectEnv(projectId, values);
     closeEnvModal();
     return snap;
   });
@@ -1326,19 +1406,17 @@ $("#btn-new-create").addEventListener("click", () => {
       name,
       parentDir,
       country: code,
-      crawlModel:
-        (el.newCrawlModel?.value || "").trim() || "qwen2.5:14b",
-      antibotModel:
-        (el.newAntibotModel?.value || "").trim() || "captchamind:7b",
+      crawlModel: (el.newCrawlModel?.value || "").trim() || "qwen2.5:14b",
+      antibotModel: (el.newAntibotModel?.value || "").trim() || "captchamind:7b",
       workers: Math.min(
         8,
-        Math.max(1, Number.parseInt(el.newWorkers?.value || "1", 10) || 1)
+        Math.max(1, Number.parseInt(el.newWorkers?.value || "1", 10) || 1),
       ),
       options,
       openCursor: !!el.newOpenCursor.checked,
     });
     const created = (snap?.crawlers || []).find(
-      (c) => c.kind === "project" && c.name === name
+      (c) => c.kind === "project" && c.name === name,
     );
     if (created) {
       selectedProjectId = created.id;
@@ -1362,7 +1440,7 @@ $("#btn-open-project").addEventListener("click", () =>
       projectPath,
       country: snapshot?.active || "ro",
     });
-  })
+  }),
 );
 
 $("#btn-import-project").addEventListener("click", () =>
@@ -1375,7 +1453,7 @@ $("#btn-import-project").addEventListener("click", () =>
       await attachProjectLogs(snap.importedProjectId);
     }
     return snap;
-  })
+  }),
 );
 
 $("#btn-save-key").addEventListener("click", () =>
@@ -1383,7 +1461,7 @@ $("#btn-save-key").addEventListener("click", () =>
     await api().setupEnv(el.privateKey.value);
     log("Zapisano klucz");
     return api().getSnapshot();
-  })
+  }),
 );
 
 $("#btn-key-help").addEventListener("click", () => api().pickEnvHelp());
@@ -1394,17 +1472,23 @@ api().onLog((line) => {
 });
 
 api().onProjectLog((payload) => {
-  if (!payload || payload.id !== selectedProjectId) return;
-  appendProjectLog(payload.line);
+  if (!payload?.id || !payload.line) return;
+  const running = isProjectRunning(payload.id);
+  const backfill = Date.now() < (previewBackfillUntil.get(payload.id) || 0);
+  ingestPreviewLine(payload.id, payload.line, {
+    running,
+    ping: !backfill && running,
+  });
+  if (payload.id === selectedProjectId && !backfill) {
+    appendProjectLog(payload.line);
+  }
 });
 
 function showUpdateBanner(visible: boolean): void {
   el.updateBanner.classList.toggle("hidden", !visible);
 }
 
-function setUpdateButtons(
-  opts: { download?: boolean; install?: boolean } = {},
-): void {
+function setUpdateButtons(opts: { download?: boolean; install?: boolean } = {}): void {
   const { download = false, install = false } = opts;
   el.btnUpdateDownload.classList.toggle("hidden", !download);
   el.btnUpdateInstall.classList.toggle("hidden", !install);

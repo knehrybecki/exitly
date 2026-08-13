@@ -4,16 +4,14 @@
   function api() {
     const hub = window.vpnHub;
     if (!hub) {
-      throw new Error(
-        "vpnHub niedost\u0119pne \u2014 preload nie za\u0142adowa\u0142 si\u0119 (sandbox / build)."
-      );
+      throw new Error("vpnHub niedost\u0119pne \u2014 preload nie za\u0142adowa\u0142 si\u0119 (sandbox / build).");
     }
     return hub;
   }
 
   // src/renderer/ui.ts
   var $ = (sel) => document.querySelector(sel);
-  var $$ = (sel) => [...document.querySelectorAll(sel)];
+  var $$ = (sel) => Array.from(document.querySelectorAll(sel));
   function requireEl(root, sel) {
     const node = root.querySelector(sel);
     if (!node) throw new Error(`Missing element: ${sel}`);
@@ -63,6 +61,179 @@
     const s = String(filePath || "").replace(/[/\\]+$/, "");
     const idx = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\"));
     return idx > 0 ? s.slice(0, idx) : s;
+  }
+
+  // src/renderer/projects/preview.ts
+  var MAX_STREAM = 4;
+  var states = /* @__PURE__ */ new Map();
+  var pingAt = /* @__PURE__ */ new Map();
+  function getPreviewState(id) {
+    let state = states.get(id);
+    if (!state) {
+      state = { kind: "idle", lines: [], running: false };
+      states.set(id, state);
+    }
+    return state;
+  }
+  function dropPreviewState(id) {
+    states.delete(id);
+    pingAt.delete(id);
+  }
+  function classifyLogLine(line) {
+    const s = line.toLowerCase();
+    if (/error|exception|fatal|traceback|failed|eacces|denied|cannot|crash/.test(s)) {
+      return "error";
+    }
+    if (/warn|retry|timeout|captcha|blocked|429|rate.?limit/.test(s)) {
+      return "warn";
+    }
+    if (/wireguard|wg0|vpn|proton|connected|exit node|tunnel/.test(s)) {
+      return "vpn";
+    }
+    if (/\bmcp\b|json-?rpc|jsonrpc/.test(s)) return "mcp";
+    if (/https?:\/\/|\bget |\bpost |\bcrawl|fetch|scrap|visit|url=|request/.test(s)) {
+      return "crawl";
+    }
+    if (/listening|started|ready|ok\b|done|saved|success/.test(s)) return "ok";
+    if (/start|boot|init|compos|pulling|creating/.test(s)) return "boot";
+    return "crawl";
+  }
+  function ingestPreviewLine(id, line, opts) {
+    const text = String(line || "").replace(/\s+/g, " ").trim();
+    if (!text) return getPreviewState(id);
+    const state = getPreviewState(id);
+    state.kind = classifyLogLine(text);
+    if (opts?.running != null) state.running = opts.running;
+    state.lines = [...state.lines, text].slice(-MAX_STREAM);
+    const card = document.querySelector(
+      `.project-card[data-id="${cssEscape(id)}"]`
+    );
+    if (card) applyPreviewToCard(card, id, state.running);
+    if (opts?.ping !== false) maybePing(id, state.kind);
+    return state;
+  }
+  function seedPreviewLines(id, text, running) {
+    const lines = String(text || "").split(/\r?\n/).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l && !/^\(/.test(l)).slice(-MAX_STREAM);
+    const state = getPreviewState(id);
+    state.running = running;
+    if (lines.length) {
+      state.lines = lines;
+      state.kind = classifyLogLine(lines[lines.length - 1] || "");
+    } else if (!running) {
+      state.kind = "idle";
+    }
+    return state;
+  }
+  function svgId(projectId, name) {
+    const safe = projectId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 28) || "p";
+    return `pv-${safe}-${name}`;
+  }
+  function renderPreviewHtml(projectId, running) {
+    const g = svgId(projectId, "g");
+    const sweep = svgId(projectId, "s");
+    const state = getPreviewState(projectId);
+    state.running = running;
+    const kind = running ? state.kind || "boot" : "idle";
+    const stream = previewStreamHtml(state, running);
+    return `
+    <div class="project-preview" data-role="preview" data-running="${running ? "true" : "false"}" data-kind="${kind}">
+      <svg class="preview-scene" viewBox="0 0 400 108" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <radialGradient id="${g}" cx="50%" cy="58%" r="55%">
+            <stop offset="0" stop-color="#b6e34a" stop-opacity="0.28"/>
+            <stop offset="1" stop-color="#064644" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="${sweep}" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#39ff88" stop-opacity="0"/>
+            <stop offset="0.72" stop-color="#39ff88" stop-opacity="0.08"/>
+            <stop offset="1" stop-color="#b6e34a" stop-opacity="0.55"/>
+          </linearGradient>
+        </defs>
+        <rect width="400" height="108" fill="#02140f"/>
+        <rect width="400" height="108" fill="url(#${g})"/>
+        <g class="preview-grid" stroke="#39ff88" stroke-opacity="0.12" fill="none">
+          <path d="M0 86 H400 M0 94 H400 M0 102 H400"/>
+          <path d="M40 70 V108 M80 62 V108 M120 70 V108 M160 58 V108 M200 52 V108 M240 58 V108 M280 70 V108 M320 62 V108 M360 74 V108"/>
+        </g>
+        <g class="preview-city" fill="#011a19" stroke="#0a6b5f" stroke-width="1">
+          <path d="M18 108 V78 h10 V108 M36 108 V64 h14 V108 M58 108 V84 h8 V108"/>
+          <path d="M318 108 V80 h12 V108 M338 108 V68 h16 V108 M362 108 V88 h10 V108"/>
+          <path d="M168 108 L188 58 H212 L232 108 Z"/>
+          <rect x="178" y="72" width="4" height="12" rx="1"/>
+          <rect x="218" y="72" width="4" height="12" rx="1"/>
+          <rect x="172" y="88" width="6" height="20" rx="1"/>
+          <rect x="222" y="88" width="6" height="20" rx="1"/>
+        </g>
+        <g class="preview-arcs" fill="none" stroke="#b6e34a" stroke-linecap="round">
+          <path d="M200 62 m-28 0 a28 16 0 0 1 56 0" stroke-width="1.6" opacity="0.95"/>
+          <path d="M200 62 m-52 0 a52 28 0 0 1 104 0" stroke-width="1.35" opacity="0.7"/>
+          <path d="M200 62 m-78 0 a78 40 0 0 1 156 0" stroke-width="1.15" opacity="0.45"/>
+          <path d="M200 62 m-108 0 a108 52 0 0 1 216 0" stroke-width="1" opacity="0.28"/>
+        </g>
+        <g class="preview-sweep" style="transform-origin: 200px 62px">
+          <path d="M200 62 L308 18" stroke="url(#${sweep})" stroke-width="18" stroke-linecap="round"/>
+          <path d="M200 62 L312 16" stroke="#b6e34a" stroke-width="1.4" stroke-opacity="0.9"/>
+        </g>
+        <circle class="preview-core" cx="200" cy="62" r="5" fill="#b6e34a"/>
+        <circle class="preview-core-ring" cx="200" cy="62" r="9" fill="none" stroke="#b6e34a" stroke-width="1.2"/>
+        <circle class="preview-packet" cx="92" cy="62" r="2.2" fill="#b6e34a"/>
+        <circle class="preview-packet delay" cx="148" cy="62" r="1.8" fill="#9dffc2"/>
+      </svg>
+      <div class="preview-pings" data-role="preview-pings"></div>
+      <div class="preview-live"><span></span> live</div>
+      <div class="preview-stream" data-role="preview-stream">${stream}</div>
+    </div>`;
+  }
+  function previewStreamHtml(state, running) {
+    const lines = state.lines.slice(-MAX_STREAM);
+    if (!lines.length) {
+      const fallback = running ? "nas\u0142uchiwanie log\xF3w\u2026" : "projekt w u\u015Bpieniu";
+      return `<p class="preview-line muted">${escapePreview(fallback)}</p>`;
+    }
+    return lines.map(
+      (line, i) => `<p class="preview-line${i === lines.length - 1 ? " current" : ""}">${escapePreview(
+        line
+      )}</p>`
+    ).join("");
+  }
+  function escapePreview(value) {
+    return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function applyPreviewToCard(card, id, running) {
+    const root = card.querySelector('[data-role="preview"]');
+    if (!root) return;
+    const state = getPreviewState(id);
+    state.running = running;
+    root.dataset.running = running ? "true" : "false";
+    root.dataset.kind = running ? state.kind || "boot" : "idle";
+    const stream = root.querySelector('[data-role="preview-stream"]');
+    if (stream) stream.innerHTML = previewStreamHtml(state, running);
+  }
+  function spawnPreviewPing(card, kind) {
+    const layer = card.querySelector('[data-role="preview-pings"]');
+    if (!layer) return;
+    const ping = document.createElement("span");
+    ping.className = `preview-ping kind-${kind}`;
+    ping.style.left = `${10 + Math.random() * 80}%`;
+    ping.style.top = `${12 + Math.random() * 52}%`;
+    layer.appendChild(ping);
+    ping.addEventListener("animationend", () => ping.remove());
+    while (layer.children.length > 12) layer.firstElementChild?.remove();
+  }
+  function maybePing(id, kind) {
+    const now = Date.now();
+    const last = pingAt.get(id) || 0;
+    if (now - last < 90) return;
+    pingAt.set(id, now);
+    const card = document.querySelector(`.project-card[data-id="${cssEscape(id)}"]`);
+    if (!card) return;
+    spawnPreviewPing(card, kind);
+  }
+  function cssEscape(id) {
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+      return CSS.escape(id);
+    }
+    return id.replace(/"/g, '\\"');
   }
 
   // src/renderer/main.ts
@@ -159,6 +330,9 @@
   var dupSourceId = null;
   var dupFolderTouched = false;
   var projectIpCache = /* @__PURE__ */ new Map();
+  var followedLogIds = /* @__PURE__ */ new Set();
+  var previewBackfillUntil = /* @__PURE__ */ new Map();
+  var lastProjectsRenderKey = "";
   function showView(name) {
     view = name;
     el.settings.classList.toggle("hidden", name !== "settings");
@@ -275,10 +449,7 @@
     }
     if (cfg.configured) {
       if (cfg.up) {
-        setHostWgStatus(
-          `Exitly trzyma tunel ${cfg.name || "wg0"} \u2014 CRM LAN OK`,
-          "ok"
-        );
+        setHostWgStatus(`Exitly trzyma tunel ${cfg.name || "wg0"} \u2014 CRM LAN OK`, "ok");
       } else if (cfg.managed) {
         setHostWgStatus(
           `Config OK \xB7 Exitly podniesie ${cfg.name || "wg0"} przy starcie`,
@@ -326,9 +497,6 @@
     pre.scrollTop = pre.scrollHeight;
   }
   async function attachProjectLogs(id) {
-    if (selectedProjectId && selectedProjectId !== id) {
-      await api().stopProjectLogs(selectedProjectId);
-    }
     selectedProjectId = id;
     projectLogBuffer = "";
     try {
@@ -341,24 +509,95 @@
         pre.textContent = projectLogBuffer || "(brak log\xF3w)\n";
         pre.scrollTop = pre.scrollHeight;
       }
-      await api().followProjectLogs(id);
+      seedPreviewLines(id, projectLogBuffer, isProjectRunning(id));
+      const card = document.querySelector(`.project-card[data-id="${id}"]`);
+      if (card) applyPreviewToCard(card, id, isProjectRunning(id));
+      await ensureProjectLogFollow(id);
     } catch (err) {
       appendProjectLog(`(logi: ${errMsg(err)})`);
     }
   }
   async function detachProjectLogs() {
     if (!selectedProjectId) return;
-    try {
-      await api().stopProjectLogs(selectedProjectId);
-    } catch {
-    }
+    const id = selectedProjectId;
     selectedProjectId = null;
     projectLogBuffer = "";
+    if (!isProjectRunning(id)) {
+      await stopProjectLogFollow(id);
+    }
+  }
+  function isProjectRunning(id) {
+    return !!(snapshot?.crawlers || []).find((c) => c.id === id)?.running;
+  }
+  async function ensureProjectLogFollow(id) {
+    if (followedLogIds.has(id)) return;
+    followedLogIds.add(id);
+    previewBackfillUntil.set(id, Date.now() + 1100);
+    try {
+      await api().followProjectLogs(id);
+    } catch {
+      followedLogIds.delete(id);
+    }
+  }
+  async function stopProjectLogFollow(id) {
+    if (!followedLogIds.has(id)) return;
+    followedLogIds.delete(id);
+    previewBackfillUntil.delete(id);
+    try {
+      await api().stopProjectLogs(id);
+    } catch {
+    }
+  }
+  async function syncProjectLogFollows(projects) {
+    const wanted = new Set(
+      projects.filter((p) => p.running || p.id === selectedProjectId).map((p) => p.id)
+    );
+    for (const id of [...followedLogIds]) {
+      if (!wanted.has(id)) await stopProjectLogFollow(id);
+    }
+    for (const item of projects) {
+      if (!wanted.has(item.id) || followedLogIds.has(item.id)) continue;
+      try {
+        const res = await api().getProjectLogs(item.id);
+        const text = typeof res === "string" ? res : res?.text || "";
+        seedPreviewLines(item.id, text, !!item.running);
+        const card = document.querySelector(`.project-card[data-id="${item.id}"]`);
+        if (card) applyPreviewToCard(card, item.id, !!item.running);
+      } catch {
+      }
+      await ensureProjectLogFollow(item.id);
+    }
+  }
+  function projectsRenderKey(projects) {
+    return projects.map(
+      (p) => [
+        p.id,
+        p.running ? "1" : "0",
+        p.envReady === false ? "0" : "1",
+        p.country || p.exit || "",
+        p.crawlModel || "",
+        p.antibotModel || "",
+        p.workers || "",
+        p.cliCommand || "",
+        p.useHostWg ? "1" : "0",
+        (p.envMissing || []).join(","),
+        JSON.stringify(p.optionValues || {}),
+        (p.envFields || []).map((f) => `${f.key}:${f.value || ""}:${f.missing ? 1 : 0}`).join(","),
+        p.id === selectedProjectId ? "open" : ""
+      ].join(":")
+    ).join("|");
   }
   function renderProjects(snap) {
     const projects = (snap.crawlers || []).filter((c) => c.kind === "project");
-    el.projectList.innerHTML = "";
+    const knownIds = new Set(projects.map((p) => p.id));
+    for (const id of [...followedLogIds]) {
+      if (!knownIds.has(id)) {
+        void stopProjectLogFollow(id);
+        dropPreviewState(id);
+      }
+    }
     if (!projects.length) {
+      lastProjectsRenderKey = "";
       el.projectList.innerHTML = `
       <div class="project-empty">
         <strong>Brak projekt\xF3w</strong>
@@ -369,6 +608,13 @@
     if (selectedProjectId && !projects.some((p) => p.id === selectedProjectId)) {
       void detachProjectLogs();
     }
+    const renderKey = projectsRenderKey(projects);
+    if (renderKey === lastProjectsRenderKey && el.projectList.querySelector(".project-card")) {
+      void syncProjectLogFollows(projects);
+      return;
+    }
+    lastProjectsRenderKey = renderKey;
+    el.projectList.innerHTML = "";
     for (const item of projects) {
       const running = !!item.running;
       const open = selectedProjectId === item.id;
@@ -473,6 +719,7 @@
         `<button type="button" class="ghost" data-role="duplicate">Duplikuj</button>`
       ].filter(Boolean).join("\n         ");
       card.innerHTML = `
+      ${renderPreviewHtml(item.id, running)}
       <div class="project-top">
         <div>
           <p class="project-name">${escapeHtml(item.name)} <span class="mode-tag">${isCli ? escapeHtml(cliLabel || "CLI") : "Docker"}</span></p>
@@ -561,7 +808,9 @@
           });
         });
       }
-      const crawlSelect = card.querySelector('[data-role="crawl-model"]');
+      const crawlSelect = card.querySelector(
+        '[data-role="crawl-model"]'
+      );
       const antibotSelect = card.querySelector(
         '[data-role="antibot-model"]'
       );
@@ -730,13 +979,16 @@ Folder na dysku zostaje.`)) return;
           withBusy(async () => {
             if (selectedProjectId === item.id) await detachProjectLogs();
             projectIpCache.delete(item.id);
+            dropPreviewState(item.id);
             log2(`Usuwam ${item.name}`);
             return api().removeCrawler(item.id);
           });
         }
       );
+      applyPreviewToCard(card, item.id, running);
       el.projectList.appendChild(card);
     }
+    void syncProjectLogFollows(projects);
   }
   function pathBasename(p) {
     const s = String(p || "");
@@ -776,17 +1028,15 @@ Folder na dysku zostaje.`)) return;
   }
   function collectStartOptionValues(card) {
     const values = {};
-    card.querySelectorAll("[data-opt-id]").forEach(
-      (node) => {
-        const id = node.getAttribute("data-opt-id");
-        if (!id) return;
-        if (node instanceof HTMLInputElement && node.type === "checkbox") {
-          values[id] = node.checked ? "1" : "0";
-        } else {
-          values[id] = node.value || "";
-        }
+    card.querySelectorAll("[data-opt-id]").forEach((node) => {
+      const id = node.getAttribute("data-opt-id");
+      if (!id) return;
+      if (node instanceof HTMLInputElement && node.type === "checkbox") {
+        values[id] = node.checked ? "1" : "0";
+      } else {
+        values[id] = node.value || "";
       }
-    );
+    });
     return values;
   }
   function renderNewOptionRow(opt = {}) {
@@ -818,11 +1068,9 @@ Folder na dysku zostaje.`)) return;
   }
   function collectNewOptionsFromModal() {
     if (!el.newOptionsList) return [];
-    return [...el.newOptionsList.querySelectorAll(".option-row")].map((row) => {
+    return Array.from(el.newOptionsList.querySelectorAll(".option-row")).map((row) => {
       const get = (f) => {
-        const node = row.querySelector(
-          `[data-f="${f}"]`
-        );
+        const node = row.querySelector(`[data-f="${f}"]`);
         return (node?.value || "").trim();
       };
       return {
@@ -948,16 +1196,8 @@ Folder na dysku zostaje.`)) return;
     fillCountrySelect(el.newCountry, snapshot?.countries, snapshot?.active || "ro");
     const defaults = snapshot?.ollama?.defaults || {};
     const models = snapshot?.ollama?.models || [];
-    fillModelSelect(
-      el.newCrawlModel,
-      defaults.crawlModel || "qwen2.5:14b",
-      models
-    );
-    fillModelSelect(
-      el.newAntibotModel,
-      defaults.antibotModel || "captchamind:7b",
-      models
-    );
+    fillModelSelect(el.newCrawlModel, defaults.crawlModel || "qwen2.5:14b", models);
+    fillModelSelect(el.newAntibotModel, defaults.antibotModel || "captchamind:7b", models);
     void refreshOllamaModelsForSelect(el.newCrawlModel);
     if (el.newOptionsList) {
       el.newOptionsList.innerHTML = "";
@@ -1126,6 +1366,7 @@ Folder na dysku zostaje.`)) return;
   });
   $("#btn-env-save").addEventListener("click", () => {
     if (!envEditProjectId) return;
+    const projectId = envEditProjectId;
     const values = {};
     el.envFields.querySelectorAll("[data-env-key]").forEach((input) => {
       const key = input.getAttribute("data-env-key");
@@ -1133,7 +1374,7 @@ Folder na dysku zostaje.`)) return;
     });
     withBusy(async () => {
       log2("Zapisuj\u0119 .env projektu");
-      const snap = await api().setProjectEnv(envEditProjectId, values);
+      const snap = await api().setProjectEnv(projectId, values);
       closeEnvModal();
       return snap;
     });
@@ -1224,8 +1465,16 @@ Folder na dysku zostaje.`)) return;
     if (line) log2(line);
   });
   api().onProjectLog((payload) => {
-    if (!payload || payload.id !== selectedProjectId) return;
-    appendProjectLog(payload.line);
+    if (!payload?.id || !payload.line) return;
+    const running = isProjectRunning(payload.id);
+    const backfill = Date.now() < (previewBackfillUntil.get(payload.id) || 0);
+    ingestPreviewLine(payload.id, payload.line, {
+      running,
+      ping: !backfill && running
+    });
+    if (payload.id === selectedProjectId && !backfill) {
+      appendProjectLog(payload.line);
+    }
   });
   function showUpdateBanner(visible) {
     el.updateBanner.classList.toggle("hidden", !visible);

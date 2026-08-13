@@ -30,10 +30,10 @@ export function applyAppIcon(win: BW | null): void {
 export function createMainWindow(): BW {
   const icon = resolveAppIcon();
   const win = new BrowserWindow({
-    width: 980,
-    height: 720,
-    minWidth: 780,
-    minHeight: 560,
+    width: 1200,
+    height: 780,
+    minWidth: 480,
+    minHeight: 520,
     title: "Exitly",
     backgroundColor: "#030806",
     show: false,

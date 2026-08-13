@@ -1,7 +1,7 @@
 export const $ = <T extends Element = HTMLElement>(sel: string): T =>
   document.querySelector(sel) as T;
 export const $$ = <T extends Element = HTMLElement>(sel: string): T[] =>
-  [...document.querySelectorAll(sel)] as T[];
+  Array.from(document.querySelectorAll(sel)) as T[];
 
 export function requireEl<T extends Element = HTMLElement>(
   root: ParentNode,

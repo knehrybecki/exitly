@@ -1,7 +1,7 @@
 {
   "name": "exitly",
   "productName": "Exitly",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Exitly — ProtonVPN country exits for any Docker project",
   "main": "lib/main/index.js",
   "author": {
@@ -20,6 +20,11 @@
     "build": "tsc -p tsconfig.json && pnpm run build:preload && pnpm run build:renderer",
     "build:preload": "esbuild src/preload.ts --bundle --outfile=lib/preload.js --platform=node --format=cjs --external:electron --target=es2022",
     "build:renderer": "esbuild src/renderer/main.ts --bundle --outfile=renderer/renderer.js --platform=browser --target=es2022 --format=iife",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.renderer.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "vitest run",
     "prestart": "node -e \"require('typescript'); require('esbuild'); require('electron')\"",
     "start": "pnpm run build && env -u ELECTRON_RUN_AS_NODE electron .",
